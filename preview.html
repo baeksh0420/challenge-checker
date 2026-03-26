@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>챌린지 체커 - 프리뷰</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #E5E7EB;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .phone-frame {
+    width: 390px;
+    height: 844px;
+    background: #F9FAFB;
+    border-radius: 40px;
+    overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    border: 8px solid #1F2937;
+  }
+
+  .status-bar {
+    height: 50px;
+    background: #F9FAFB;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1F2937;
+  }
+
+  .screen-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 70px;
+  }
+  .screen-content::-webkit-scrollbar { display: none; }
+
+  /* Tab Bar */
+  .tab-bar {
+    height: 64px;
+    background: #FFFFFF;
+    border-top: 1px solid #F3F4F6;
+    display: flex;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: #9CA3AF;
+    font-size: 11px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  .tab-item.active { color: #4F46E5; }
+  .tab-item .tab-icon { font-size: 22px; }
+
+  /* Header */
+  .header-bar {
+    padding: 16px 20px 12px;
+  }
+  .header-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #1F2937;
+  }
+  .section-header {
+    padding: 8px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #6B7280;
+  }
+
+  /* Challenge Card */
+  .challenge-card {
+    background: #FFFFFF;
+    border-radius: 16px;
+    padding: 16px;
+    margin: 6px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .challenge-card:hover { transform: translateY(-2px); }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1F2937;
+  }
+  .status-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-active { background: #10B98120; color: #10B981; }
+  .status-upcoming { background: #F59E0B20; color: #F59E0B; }
+  .card-desc {
+    font-size: 14px;
+    color: #6B7280;
+    margin-bottom: 12px;
+    line-height: 20px;
+  }
+  .card-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .info-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .info-label { font-size: 12px; color: #9CA3AF; }
+  .info-value { font-size: 12px; font-weight: 600; color: #4B5563; }
+  .joined-badge {
+    background: #4F46E520;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4F46E5;
+  }
+  .date-range {
+    font-size: 12px;
+    color: #9CA3AF;
+    margin-top: 8px;
+  }
+
+  /* FAB */
+  .fab-row {
+    position: absolute;
+    bottom: 80px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    z-index: 50;
+  }
+  .fab {
+    background: #4F46E5;
+    color: #FFFFFF;
+    padding: 14px 24px;
+    border-radius: 28px;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(79,70,229,0.3);
+    transition: transform 0.15s;
+  }
+  .fab:hover { transform: scale(1.05); }
+
+  /* Detail Screen */
+  .detail-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1F2937;
+    margin-bottom: 8px;
+    padding: 0 20px;
+  }
+  .detail-desc {
+    font-size: 15px;
+    color: #6B7280;
+    padding: 0 20px;
+    margin-bottom: 16px;
+    line-height: 22px;
+  }
+  .info-box {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 16px;
+    margin: 0 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+  }
+  .info-item-label { font-size: 14px; color: #6B7280; }
+  .info-item-value { font-size: 14px; font-weight: 600; color: #1F2937; }
+
+  /* Calendar */
+  .calendar-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1F2937;
+    margin-bottom: 10px;
+    padding: 0 20px;
+  }
+  .user-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 0 20px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+  }
+  .user-tab {
+    padding: 8px 14px;
+    border-radius: 20px;
+    background: #E5E7EB;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4B5563;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .user-tab.active {
+    background: #4F46E5;
+    color: #FFFFFF;
+  }
+
+  .calendar {
+    background: #FFFFFF;
+    border-radius: 16px;
+    padding: 16px;
+    margin: 0 20px;
+  }
+  .cal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .cal-arrow {
+    background: none;
+    border: none;
+    font-size: 16px;
+    color: #4B5563;
+    cursor: pointer;
+    padding: 8px;
+  }
+  .cal-month {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1F2937;
+  }
+  .cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 8px;
+  }
+  .cal-weekday {
+    text-align: center;
+    font-size: 12px;
+    color: #9CA3AF;
+    font-weight: 600;
+  }
+  .cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cal-day-inner {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #374151;
+    font-weight: 500;
+  }
+  .cal-day-inner.checked {
+    background: #4F46E5;
+    color: #FFFFFF;
+    font-weight: 700;
+  }
+  .cal-day-inner.today {
+    border: 2px solid #4F46E5;
+  }
+  .cal-day-inner.out-range {
+    opacity: 0.3;
+  }
+
+  /* Participant Progress */
+  .participants-box {
+    background: #FFFFFF;
+    border-radius: 16px;
+    padding: 16px;
+    margin: 20px;
+  }
+  .participants-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1F2937;
+    margin-bottom: 12px;
+  }
+  .participant-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #F3F4F6;
+  }
+  .participant-row:last-child { border-bottom: none; }
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .participant-info { flex: 1; }
+  .participant-name-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .participant-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1F2937;
+  }
+  .participant-days {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4F46E5;
+  }
+  .progress-bar-bg {
+    height: 6px;
+    background: #E5E7EB;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: #4F46E5;
+    border-radius: 3px;
+    transition: width 0.5s;
+  }
+  .fine-text {
+    font-size: 12px;
+    color: #EF4444;
+    margin-top: 4px;
+  }
+
+  /* Action Buttons */
+  .action-row {
+    padding: 0 20px;
+    margin-top: 12px;
+    margin-bottom: 20px;
+  }
+  .checkin-btn {
+    width: 100%;
+    background: #4F46E5;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .checkin-btn:hover { opacity: 0.9; }
+
+  /* CheckIn Screen */
+  .checkin-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1F2937;
+    padding: 16px 20px 4px;
+  }
+  .checkin-date {
+    font-size: 14px;
+    color: #6B7280;
+    padding: 0 20px 20px;
+  }
+  .type-row {
+    display: flex;
+    gap: 10px;
+    padding: 0 20px;
+    margin-bottom: 20px;
+  }
+  .type-btn {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    background: #E5E7EB;
+    font-size: 15px;
+    font-weight: 600;
+    color: #6B7280;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .type-btn.active {
+    background: #4F46E5;
+    color: #FFFFFF;
+  }
+  .text-area-input {
+    width: calc(100% - 40px);
+    margin: 0 20px;
+    min-height: 150px;
+    background: #FFFFFF;
+    border: 1px solid #D1D5DB;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 16px;
+    color: #1F2937;
+    resize: none;
+    font-family: inherit;
+  }
+  .char-count {
+    text-align: right;
+    padding: 4px 20px 0;
+    font-size: 12px;
+    color: #9CA3AF;
+  }
+  .photo-buttons {
+    display: flex;
+    gap: 12px;
+    padding: 0 20px;
+  }
+  .photo-btn {
+    flex: 1;
+    background: #FFFFFF;
+    border: 2px dashed #E5E7EB;
+    border-radius: 16px;
+    padding: 40px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+  }
+  .photo-btn-icon { font-size: 32px; margin-bottom: 8px; }
+  .photo-btn-text { font-size: 14px; font-weight: 600; color: #6B7280; }
+  .submit-btn {
+    width: calc(100% - 40px);
+    margin: 20px;
+    background: #4F46E5;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Profile */
+  .profile-card {
+    background: #FFFFFF;
+    border-radius: 16px;
+    padding: 20px;
+    margin: 0 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .profile-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    color: #FFFFFF;
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .profile-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1F2937;
+    text-align: center;
+  }
+  .profile-hint {
+    font-size: 12px;
+    color: #9CA3AF;
+    margin-top: 2px;
+  }
+  .stats-row {
+    display: flex;
+    gap: 12px;
+    padding: 0 20px;
+    margin-bottom: 24px;
+  }
+  .stat-box {
+    flex: 1;
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-number {
+    font-size: 24px;
+    font-weight: 800;
+    color: #4F46E5;
+    margin-bottom: 4px;
+  }
+  .stat-label {
+    font-size: 12px;
+    color: #6B7280;
+    font-weight: 500;
+  }
+  .recent-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1F2937;
+    margin-bottom: 12px;
+    padding: 0 20px;
+  }
+  .checkin-item {
+    display: flex;
+    align-items: flex-start;
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 0 20px 8px;
+  }
+  .checkin-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4F46E5;
+    margin-top: 5px;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+  .checkin-info-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1F2937;
+  }
+  .checkin-info-date {
+    font-size: 12px;
+    color: #9CA3AF;
+    margin-top: 2px;
+  }
+  .checkin-info-content {
+    font-size: 13px;
+    color: #6B7280;
+    margin-top: 4px;
+  }
+
+  /* Create Screen */
+  .create-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1F2937;
+    padding: 16px 20px 24px;
+  }
+  .field {
+    padding: 0 20px;
+    margin-bottom: 16px;
+  }
+  .field-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+  }
+  .field-input {
+    width: 100%;
+    background: #FFFFFF;
+    border: 1px solid #D1D5DB;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 16px;
+    color: #1F2937;
+    font-family: inherit;
+  }
+  .field-row {
+    display: flex;
+    gap: 12px;
+    padding: 0 20px;
+    margin-bottom: 16px;
+  }
+  .field-row .field { padding: 0; flex: 1; margin-bottom: 0; }
+  .create-btn {
+    width: calc(100% - 40px);
+    margin: 12px 20px;
+    background: #4F46E5;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Back button */
+  .back-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 16px 20px 8px;
+    color: #4B5563;
+  }
+
+  /* Empty state */
+  .empty-container {
+    text-align: center;
+    padding-top: 60px;
+  }
+  .empty-icon { font-size: 64px; margin-bottom: 16px; }
+  .empty-text { font-size: 18px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+  .empty-sub { font-size: 14px; color: #9CA3AF; }
+
+  /* Screen visibility */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* Notification toast */
+  .toast {
+    position: absolute;
+    top: 60px;
+    left: 20px;
+    right: 20px;
+    background: #1F2937;
+    color: #FFFFFF;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 200;
+    text-align: center;
+    transform: translateY(-100px);
+    opacity: 0;
+    transition: all 0.3s;
+  }
+  .toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+<div class="phone-frame" id="app">
+  <div class="status-bar">9:41</div>
+  <div class="toast" id="toast"></div>
+
+  <!-- HOME SCREEN -->
+  <div class="screen active" id="screen-home">
+    <div class="screen-content">
+      <div class="header-bar">
+        <div class="header-title">챌린지 체커</div>
+      </div>
+      <div class="section-header">진행 중인 챌린지</div>
+      <div id="challenge-list"></div>
+    </div>
+    <div class="fab-row">
+      <button class="fab" onclick="showScreen('create')">+ 챌린지 만들기</button>
+    </div>
+  </div>
+
+  <!-- MY CHALLENGES SCREEN -->
+  <div class="screen" id="screen-mychallenges">
+    <div class="screen-content">
+      <div class="header-bar">
+        <div class="header-title">내 챌린지</div>
+      </div>
+      <div id="my-challenge-list"></div>
+    </div>
+  </div>
+
+  <!-- PROFILE SCREEN -->
+  <div class="screen" id="screen-profile">
+    <div class="screen-content">
+      <div class="header-bar">
+        <div class="header-title">프로필</div>
+      </div>
+      <div class="profile-card">
+        <div class="profile-avatar" style="background:#EF4444;">나</div>
+        <div class="profile-name" id="profile-name">나</div>
+        <div class="profile-hint">탭하여 이름 변경</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-number" id="stat-total">0</div>
+          <div class="stat-label">전체 챌린지</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="stat-active">0</div>
+          <div class="stat-label">진행 중</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="stat-checkins">0</div>
+          <div class="stat-label">총 인증</div>
+        </div>
+      </div>
+      <div class="recent-title">최근 인증 기록</div>
+      <div id="recent-checkins"></div>
+    </div>
+  </div>
+
+  <!-- CREATE SCREEN -->
+  <div class="screen" id="screen-create">
+    <div class="screen-content">
+      <button class="back-btn" onclick="showScreen('home')">← 뒤로</button>
+      <div class="create-title">새 챌린지 만들기</div>
+      <div class="field">
+        <div class="field-label">챌린지 이름 *</div>
+        <input class="field-input" id="c-title" placeholder="예: 매일 운동하기" maxlength="50">
+      </div>
+      <div class="field">
+        <div class="field-label">설명</div>
+        <textarea class="field-input" id="c-desc" placeholder="챌린지에 대한 설명을 적어주세요" rows="3" maxlength="200" style="resize:none;"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <div class="field-label">기간 (주)</div>
+          <input class="field-input" id="c-weeks" type="number" value="4" min="1" max="52">
+        </div>
+        <div class="field">
+          <div class="field-label">주당 필수 횟수</div>
+          <input class="field-input" id="c-required" type="number" value="5" min="1" max="7">
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">미달성 시 주당 벌금 (원)</div>
+        <input class="field-input" id="c-fine" type="number" value="10000">
+      </div>
+      <button class="create-btn" onclick="createChallenge()">챌린지 생성</button>
+    </div>
+  </div>
+
+  <!-- DETAIL SCREEN -->
+  <div class="screen" id="screen-detail">
+    <div class="screen-content" id="detail-content"></div>
+  </div>
+
+  <!-- CHECKIN SCREEN -->
+  <div class="screen" id="screen-checkin">
+    <div class="screen-content" id="checkin-content"></div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <button class="tab-item active" id="tab-home" onclick="showTab('home')">
+      <span class="tab-icon">🏠</span>홈
+    </button>
+    <button class="tab-item" id="tab-mychallenges" onclick="showTab('mychallenges')">
+      <span class="tab-icon">🏆</span>내 챌린지
+    </button>
+    <button class="tab-item" id="tab-profile" onclick="showTab('profile')">
+      <span class="tab-icon">👤</span>프로필
+    </button>
+  </div>
+</div>
+
+<script>
+// ─── Data ───
+const currentUser = { id: 'user-1', name: '나', color: '#EF4444' };
+const users = [
+  currentUser,
+  { id: 'user-2', name: '김민수', color: '#F59E0B' },
+  { id: 'user-3', name: '이지연', color: '#10B981' },
+  { id: 'user-4', name: '박서준', color: '#3B82F6' },
+];
+
+let challenges = [];
+let checkIns = [];
+
+// ─── Seed demo data ───
+function seedData() {
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+
+  const start1 = new Date(today); start1.setDate(start1.getDate() - 14);
+  const end1 = new Date(today); end1.setDate(end1.getDate() + 14);
+
+  challenges.push({
+    id: 'ch-1',
+    title: '매일 운동 30분',
+    description: '하루 30분 이상 운동하고 인증하기! 건강한 습관을 만들어요.',
+    creatorId: 'user-1',
+    startDate: fmt(start1),
+    endDate: fmt(end1),
+    requiredDaysPerWeek: 5,
+    finePerMiss: 10000,
+    participants: ['user-1', 'user-2', 'user-3', 'user-4'],
+  });
+
+  const start2 = new Date(today); start2.setDate(start2.getDate() - 7);
+  const end2 = new Date(today); end2.setDate(end2.getDate() + 21);
+  challenges.push({
+    id: 'ch-2',
+    title: '독서 챌린지',
+    description: '매일 1시간 독서하고 감상문 남기기',
+    creatorId: 'user-2',
+    startDate: fmt(start2),
+    endDate: fmt(end2),
+    requiredDaysPerWeek: 4,
+    finePerMiss: 5000,
+    participants: ['user-1', 'user-2', 'user-3'],
+  });
+
+  const start3 = new Date(today); start3.setDate(start3.getDate() + 3);
+  const end3 = new Date(today); end3.setDate(end3.getDate() + 31);
+  challenges.push({
+    id: 'ch-3',
+    title: '영어 공부 챌린지',
+    description: '매일 영어 단어 50개 암기 & 영어 뉴스 읽기',
+    creatorId: 'user-1',
+    startDate: fmt(start3),
+    endDate: fmt(end3),
+    requiredDaysPerWeek: 6,
+    finePerMiss: 15000,
+    participants: ['user-1', 'user-4'],
+  });
+
+  // Seed check-ins for the past days
+  const texts = [
+    '오늘도 열심히 했습니다! 💪',
+    '30분 조깅 완료!',
+    '헬스장에서 웨이트 1시간',
+    '홈트레이닝 완료',
+    '공원에서 러닝 5km',
+    '스쿼트 100개 도전 성공',
+    '요가 30분',
+    '오늘은 좀 힘들었지만 해냈어요',
+    '줄넘기 1000개!',
+    '계단 오르기 20층',
+  ];
+  const bookTexts = [
+    '데미안 3장 읽음',
+    '자기계발서 1시간 독서 완료',
+    '소설 50페이지 읽었습니다',
+    '에세이 감상문 작성 완료',
+  ];
+
+  for (let d = 0; d < 14; d++) {
+    const date = new Date(start1);
+    date.setDate(date.getDate() + d);
+    if (date > today) break;
+    const dateStr = fmt(date);
+
+    // user-1: ~80% attendance
+    if (Math.random() < 0.8) {
+      checkIns.push({ id: `ci-1-${d}`, challengeId: 'ch-1', userId: 'user-1', date: dateStr, type: 'text', content: texts[d % texts.length] });
+    }
+    // user-2: ~90%
+    if (Math.random() < 0.9) {
+      checkIns.push({ id: `ci-2-${d}`, challengeId: 'ch-1', userId: 'user-2', date: dateStr, type: 'text', content: texts[(d+2) % texts.length] });
+    }
+    // user-3: ~60%
+    if (Math.random() < 0.6) {
+      checkIns.push({ id: `ci-3-${d}`, challengeId: 'ch-1', userId: 'user-3', date: dateStr, type: 'photo', content: '' });
+    }
+    // user-4: ~70%
+    if (Math.random() < 0.7) {
+      checkIns.push({ id: `ci-4-${d}`, challengeId: 'ch-1', userId: 'user-4', date: dateStr, type: 'text', content: texts[(d+5) % texts.length] });
+    }
+  }
+
+  for (let d = 0; d < 7; d++) {
+    const date = new Date(start2);
+    date.setDate(date.getDate() + d);
+    if (date > today) break;
+    const dateStr = fmt(date);
+    if (Math.random() < 0.7) {
+      checkIns.push({ id: `ci-b1-${d}`, challengeId: 'ch-2', userId: 'user-1', date: dateStr, type: 'text', content: bookTexts[d % bookTexts.length] });
+    }
+    if (Math.random() < 0.85) {
+      checkIns.push({ id: `ci-b2-${d}`, challengeId: 'ch-2', userId: 'user-2', date: dateStr, type: 'text', content: bookTexts[(d+1) % bookTexts.length] });
+    }
+  }
+}
+
+// ─── Utils ───
+function fmt(d) { return d.toISOString().split('T')[0]; }
+function getUser(id) { return users.find(u => u.id === id); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ─── Navigation ───
+let currentScreen = 'home';
+let currentDetailId = null;
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  currentScreen = name;
+
+  // Show/hide tab bar
+  const tabBar = document.querySelector('.tab-bar');
+  const fabRow = document.querySelector('.fab-row');
+  if (['create', 'detail', 'checkin'].includes(name)) {
+    tabBar.style.display = 'none';
+    if (fabRow) fabRow.style.display = 'none';
+  } else {
+    tabBar.style.display = 'flex';
+    if (fabRow) fabRow.style.display = name === 'home' ? 'flex' : 'none';
+  }
+
+  if (name === 'home') renderHome();
+  if (name === 'mychallenges') renderMyChallenges();
+  if (name === 'profile') renderProfile();
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  showScreen(name);
+}
+
+// ─── Render Home ───
+function renderHome() {
+  const list = document.getElementById('challenge-list');
+  const now = new Date();
+  const sorted = [...challenges].sort((a, b) => {
+    const aActive = now >= new Date(a.startDate) && now <= new Date(a.endDate);
+    const bActive = now >= new Date(b.startDate) && now <= new Date(b.endDate);
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
+    return 0;
+  });
+
+  if (sorted.length === 0) {
+    list.innerHTML = `
+      <div class="empty-container">
+        <div class="empty-icon">🏆</div>
+        <div class="empty-text">아직 챌린지가 없어요</div>
+        <div class="empty-sub">새 챌린지를 만들어보세요!</div>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = sorted.map(c => {
+    const isActive = now >= new Date(c.startDate) && now <= new Date(c.endDate);
+    const isUpcoming = now < new Date(c.startDate);
+    const statusText = isActive ? '진행 중' : isUpcoming ? '예정' : '종료';
+    const statusClass = isActive ? 'status-active' : 'status-upcoming';
+    const isJoined = c.participants.includes(currentUser.id);
+    return `
+      <div class="challenge-card" onclick="showDetail('${c.id}')">
+        <div class="card-header">
+          <div class="card-title">${c.title}</div>
+          <span class="status-badge ${statusClass}">${statusText}</span>
+        </div>
+        <div class="card-desc">${c.description}</div>
+        <div class="card-footer">
+          <div class="info-row"><span class="info-label">참여자</span><span class="info-value">${c.participants.length}명</span></div>
+          <div class="info-row"><span class="info-label">주 ${c.requiredDaysPerWeek}회</span><span class="info-value">벌금 ${c.finePerMiss.toLocaleString()}원</span></div>
+          ${isJoined ? '<span class="joined-badge">참여 중</span>' : ''}
+        </div>
+        <div class="date-range">${c.startDate} ~ ${c.endDate}</div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Render My Challenges ───
+function renderMyChallenges() {
+  const list = document.getElementById('my-challenge-list');
+  const my = challenges.filter(c => c.participants.includes(currentUser.id));
+  if (my.length === 0) {
+    list.innerHTML = `<div class="empty-container"><div class="empty-icon">📋</div><div class="empty-text">참여 중인 챌린지가 없어요</div></div>`;
+    return;
+  }
+  const now = new Date();
+  list.innerHTML = my.map(c => {
+    const isActive = now >= new Date(c.startDate) && now <= new Date(c.endDate);
+    const isUpcoming = now < new Date(c.startDate);
+    const statusText = isActive ? '진행 중' : isUpcoming ? '예정' : '종료';
+    const statusClass = isActive ? 'status-active' : 'status-upcoming';
+    return `
+      <div class="challenge-card" onclick="showDetail('${c.id}')">
+        <div class="card-header">
+          <div class="card-title">${c.title}</div>
+          <span class="status-badge ${statusClass}">${statusText}</span>
+        </div>
+        <div class="card-desc">${c.description}</div>
+        <div class="card-footer">
+          <div class="info-row"><span class="info-label">참여자</span><span class="info-value">${c.participants.length}명</span></div>
+          <div class="info-row"><span class="info-label">주 ${c.requiredDaysPerWeek}회</span><span class="info-value">벌금 ${c.finePerMiss.toLocaleString()}원</span></div>
+          <span class="joined-badge">참여 중</span>
+        </div>
+        <div class="date-range">${c.startDate} ~ ${c.endDate}</div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Render Profile ───
+function renderProfile() {
+  document.getElementById('profile-name').textContent = currentUser.name;
+  const my = challenges.filter(c => c.participants.includes(currentUser.id));
+  const now = new Date();
+  const active = my.filter(c => now >= new Date(c.startDate) && now <= new Date(c.endDate));
+  const myCI = checkIns.filter(ci => ci.userId === currentUser.id);
+
+  document.getElementById('stat-total').textContent = my.length;
+  document.getElementById('stat-active').textContent = active.length;
+  document.getElementById('stat-checkins').textContent = myCI.length;
+
+  const recentDiv = document.getElementById('recent-checkins');
+  if (myCI.length === 0) {
+    recentDiv.innerHTML = '<div style="text-align:center;color:#9CA3AF;padding:20px;">아직 인증 기록이 없습니다.</div>';
+    return;
+  }
+  const recent = [...myCI].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+  recentDiv.innerHTML = recent.map(ci => {
+    const ch = challenges.find(c => c.id === ci.challengeId);
+    return `
+      <div class="checkin-item">
+        <div class="checkin-dot"></div>
+        <div>
+          <div class="checkin-info-name">${ch ? ch.title : '?'}</div>
+          <div class="checkin-info-date">${ci.date}</div>
+          <div class="checkin-info-content">${ci.type === 'photo' ? '📷 사진 인증' : ci.content}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Create Challenge ───
+function createChallenge() {
+  const title = document.getElementById('c-title').value.trim();
+  if (!title) { showToast('챌린지 이름을 입력해주세요.'); return; }
+
+  const weeks = parseInt(document.getElementById('c-weeks').value) || 4;
+  const start = new Date();
+  const end = new Date(); end.setDate(end.getDate() + weeks * 7 - 1);
+
+  challenges.push({
+    id: 'ch-' + Date.now(),
+    title,
+    description: document.getElementById('c-desc').value.trim(),
+    creatorId: currentUser.id,
+    startDate: fmt(start),
+    endDate: fmt(end),
+    requiredDaysPerWeek: Math.min(parseInt(document.getElementById('c-required').value) || 5, 7),
+    finePerMiss: parseInt(document.getElementById('c-fine').value) || 10000,
+    participants: [currentUser.id],
+  });
+
+  document.getElementById('c-title').value = '';
+  document.getElementById('c-desc').value = '';
+  showToast('챌린지가 생성되었습니다! 🎉');
+  showTab('home');
+}
+
+// ─── Detail Screen ───
+let detailSelectedUser = currentUser.id;
+
+function showDetail(cid) {
+  currentDetailId = cid;
+  detailSelectedUser = currentUser.id;
+  renderDetail();
+  showScreen('detail');
+}
+
+function selectDetailUser(uid) {
+  detailSelectedUser = uid;
+  renderDetail();
+  document.getElementById('screen-detail').classList.add('active');
+}
+
+function renderDetail() {
+  const c = challenges.find(ch => ch.id === currentDetailId);
+  if (!c) return;
+
+  const now = new Date();
+  const isActive = now >= new Date(c.startDate) && now <= new Date(c.endDate);
+  const isParticipant = c.participants.includes(currentUser.id);
+
+  // Calendar
+  const userCI = checkIns.filter(ci => ci.challengeId === c.id && ci.userId === detailSelectedUser);
+  const checkedDates = new Set(userCI.map(ci => ci.date));
+
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const todayStr = fmt(today);
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+
+  const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+  const selIdx = c.participants.indexOf(detailSelectedUser);
+  const accentColor = colors[selIdx % colors.length];
+
+  let calDaysHtml = '';
+  for (let i = 0; i < firstDay; i++) calDaysHtml += '<div class="cal-day"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isChecked = checkedDates.has(ds);
+    const isToday = ds === todayStr;
+    const inRange = ds >= c.startDate && ds <= c.endDate;
+    let cls = '';
+    if (isChecked) cls = 'checked';
+    else if (isToday) cls = 'today';
+    if (!inRange) cls += ' out-range';
+    const bgStyle = isChecked ? `background:${accentColor};` : '';
+    const borderStyle = isToday && !isChecked ? `border-color:${accentColor};` : '';
+    calDaysHtml += `<div class="cal-day"><div class="cal-day-inner ${cls}" style="${bgStyle}${borderStyle}">${d}</div></div>`;
+  }
+
+  // Participants progress
+  let participantsHtml = c.participants.map((uid, idx) => {
+    const u = getUser(uid);
+    if (!u) return '';
+    const count = checkIns.filter(ci => ci.challengeId === c.id && ci.userId === uid).length;
+    const totalDays = Math.ceil((new Date(c.endDate) - new Date(c.startDate)) / (1000*60*60*24)) + 1;
+    const pct = totalDays > 0 ? Math.min(count / totalDays * 100, 100) : 0;
+    const fineInfo = calcFine(c, uid);
+    return `
+      <div class="participant-row">
+        <div class="avatar" style="background:${u.color}">${u.name[0]}</div>
+        <div class="participant-info">
+          <div class="participant-name-row">
+            <span class="participant-name">${u.name}</span>
+            <span class="participant-days">${count}일</span>
+          </div>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+          ${fineInfo.totalFine > 0 ? `<div class="fine-text">벌금: ${fineInfo.totalFine.toLocaleString()}원 (${fineInfo.missedWeeks}주 미달성)</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  let userTabsHtml = c.participants.map((uid, idx) => {
+    const u = getUser(uid);
+    const isSelected = uid === detailSelectedUser;
+    const bg = isSelected ? colors[idx % colors.length] : '#E5E7EB';
+    const clr = isSelected ? '#FFFFFF' : '#4B5563';
+    return `<button class="user-tab ${isSelected ? 'active' : ''}" style="background:${bg};color:${clr};" onclick="selectDetailUser('${uid}')">${u ? u.name : '?'}</button>`;
+  }).join('');
+
+  document.getElementById('detail-content').innerHTML = `
+    <button class="back-btn" onclick="showTab('home')">← 뒤로</button>
+    <div style="padding-top:8px;">
+      <div class="detail-title">${c.title}</div>
+      ${c.description ? `<div class="detail-desc">${c.description}</div>` : ''}
+      <div class="info-box">
+        <div class="info-item"><span class="info-item-label">기간</span><span class="info-item-value">${c.startDate} ~ ${c.endDate}</span></div>
+        <div class="info-item"><span class="info-item-label">주당 필수</span><span class="info-item-value">${c.requiredDaysPerWeek}회</span></div>
+        <div class="info-item"><span class="info-item-label">벌금</span><span class="info-item-value">${c.finePerMiss.toLocaleString()}원/주</span></div>
+      </div>
+      <div class="calendar-section-title">캘린더</div>
+      <div class="user-tabs">${userTabsHtml}</div>
+      <div class="calendar">
+        <div class="cal-header">
+          <div class="cal-month">${year}년 ${month+1}월</div>
+        </div>
+        <div class="cal-weekdays">${weekdays.map(w => `<div class="cal-weekday">${w}</div>`).join('')}</div>
+        <div class="cal-days">${calDaysHtml}</div>
+      </div>
+      <div class="participants-box">
+        <div class="participants-title">참여자 현황</div>
+        ${participantsHtml}
+      </div>
+      <div class="action-row">
+        ${!isParticipant ? `<button class="checkin-btn" style="background:#10B981" onclick="joinChallenge('${c.id}')">참여하기</button>` : ''}
+        ${isParticipant && isActive ? `<button class="checkin-btn" onclick="showCheckIn('${c.id}')">오늘 인증하기</button>` : ''}
+      </div>
+    </div>`;
+}
+
+function joinChallenge(cid) {
+  const c = challenges.find(ch => ch.id === cid);
+  if (c && !c.participants.includes(currentUser.id)) {
+    c.participants.push(currentUser.id);
+    showToast('챌린지에 참여했습니다! 🎉');
+    renderDetail();
+  }
+}
+
+function calcFine(challenge, userId) {
+  const start = new Date(challenge.startDate);
+  const end = new Date(challenge.endDate);
+  const now = new Date();
+  const effectiveEnd = now < end ? now : end;
+  const userCI = checkIns.filter(ci => ci.challengeId === challenge.id && ci.userId === userId);
+  const dates = new Set(userCI.map(ci => ci.date));
+
+  let totalWeeks = 0, missedWeeks = 0;
+  let ws = new Date(start);
+  while (ws <= effectiveEnd) {
+    const we = new Date(ws); we.setDate(we.getDate() + 6);
+    const ewe = we > effectiveEnd ? effectiveEnd : we;
+    let days = 0;
+    const d = new Date(ws);
+    while (d <= ewe) {
+      if (dates.has(fmt(d))) days++;
+      d.setDate(d.getDate() + 1);
+    }
+    totalWeeks++;
+    if (days < challenge.requiredDaysPerWeek) missedWeeks++;
+    ws.setDate(ws.getDate() + 7);
+  }
+  return { totalFine: missedWeeks * challenge.finePerMiss, missedWeeks, totalWeeks };
+}
+
+// ─── CheckIn Screen ───
+let checkinType = 'text';
+
+function showCheckIn(cid) {
+  currentDetailId = cid;
+  checkinType = 'text';
+  renderCheckIn();
+  showScreen('checkin');
+}
+
+function setCheckinType(type) {
+  checkinType = type;
+  renderCheckIn();
+  document.getElementById('screen-checkin').classList.add('active');
+}
+
+function renderCheckIn() {
+  const todayStr = fmt(new Date());
+  const existing = checkIns.find(ci => ci.challengeId === currentDetailId && ci.userId === currentUser.id && ci.date === todayStr);
+
+  document.getElementById('checkin-content').innerHTML = `
+    <button class="back-btn" onclick="showDetail('${currentDetailId}')">← 뒤로</button>
+    <div class="checkin-title">오늘의 챌린지 인증</div>
+    <div class="checkin-date">${todayStr}</div>
+    ${existing ? '<div style="background:#FEF3C7;border-radius:12px;padding:12px;margin:0 20px 16px;font-size:13px;color:#92400E;">오늘 이미 인증했습니다. 다시 제출하면 기존 인증이 교체됩니다.</div>' : ''}
+    <div class="type-row">
+      <button class="type-btn ${checkinType === 'text' ? 'active' : ''}" onclick="setCheckinType('text')">글 작성</button>
+      <button class="type-btn ${checkinType === 'photo' ? 'active' : ''}" onclick="setCheckinType('photo')">사진 인증</button>
+    </div>
+    ${checkinType === 'text' ? `
+      <textarea class="text-area-input" id="checkin-text" placeholder="오늘의 챌린지를 어떻게 수행했나요?" maxlength="500"></textarea>
+      <div class="char-count"><span id="checkin-count">0</span>/500</div>
+    ` : `
+      <div class="photo-buttons">
+        <div class="photo-btn" onclick="fakePhoto()">
+          <div class="photo-btn-icon">📷</div>
+          <div class="photo-btn-text">카메라</div>
+        </div>
+        <div class="photo-btn" onclick="fakePhoto()">
+          <div class="photo-btn-icon">🖼️</div>
+          <div class="photo-btn-text">앨범</div>
+        </div>
+      </div>
+    `}
+    <button class="submit-btn" onclick="submitCheckIn()">인증 완료</button>`;
+
+  // attach counter
+  setTimeout(() => {
+    const ta = document.getElementById('checkin-text');
+    if (ta) {
+      ta.addEventListener('input', () => {
+        document.getElementById('checkin-count').textContent = ta.value.length;
+      });
+    }
+  }, 0);
+}
+
+function fakePhoto() {
+  showToast('📷 사진이 선택되었습니다 (데모)');
+}
+
+function submitCheckIn() {
+  const todayStr = fmt(new Date());
+  let content = '';
+  if (checkinType === 'text') {
+    const ta = document.getElementById('checkin-text');
+    content = ta ? ta.value.trim() : '';
+    if (!content) { showToast('인증 내용을 입력해주세요.'); return; }
+  } else {
+    content = '📷 사진 인증 (데모)';
+  }
+
+  // Remove existing
+  checkIns = checkIns.filter(ci => !(ci.challengeId === currentDetailId && ci.userId === currentUser.id && ci.date === todayStr));
+  checkIns.push({
+    id: 'ci-' + Date.now(),
+    challengeId: currentDetailId,
+    userId: currentUser.id,
+    date: todayStr,
+    type: checkinType,
+    content,
+  });
+
+  showToast('오늘의 인증이 등록되었습니다! ✅');
+  showDetail(currentDetailId);
+}
+
+// ─── Init ───
+seedData();
+renderHome();
+</script>
+</body>
+</html>
