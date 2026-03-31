@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>챌린지 체커 - 프리뷰</title>
+<title>챌린지체커 - 프리뷰</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -124,6 +124,7 @@
   }
   .status-active { background: #10B98120; color: #10B981; }
   .status-upcoming { background: #F59E0B20; color: #F59E0B; }
+  .status-ended { background: #6B728020; color: #6B7280; }
   .card-desc {
     font-size: 14px;
     color: #6B7280;
@@ -686,9 +687,8 @@
   <div class="screen active" id="screen-home">
     <div class="screen-content">
       <div class="header-bar">
-        <div class="header-title">챌린지 체커</div>
+        <div class="header-title">챌린지체커</div>
       </div>
-      <div class="section-header">진행 중인 챌린지</div>
       <div id="challenge-list"></div>
     </div>
     <div class="fab-row">
@@ -852,6 +852,39 @@ function seedData() {
     participants: ['user-1', 'user-4'],
   });
 
+  /* 데모: 홈「최근 종료된 챌린지」구역용 — 종료일이 오늘보다 이전이며 7일 이내 */
+  const endRecentA = new Date(today);
+  endRecentA.setDate(endRecentA.getDate() - 2);
+  const startRecentA = new Date(endRecentA);
+  startRecentA.setDate(startRecentA.getDate() - 20);
+  challenges.push({
+    id: 'ch-recent-a',
+    title: '물 2L 마시기 (데모·최근 종료)',
+    description: '홈 화면「최근 종료된 챌린지」란에 뜨는 샘플입니다.',
+    creatorId: 'user-1',
+    startDate: fmt(startRecentA),
+    endDate: fmt(endRecentA),
+    requiredDaysPerWeek: 7,
+    finePerMiss: 3000,
+    participants: ['user-1', 'user-2'],
+  });
+
+  const endRecentB = new Date(today);
+  endRecentB.setDate(endRecentB.getDate() - 5);
+  const startRecentB = new Date(endRecentB);
+  startRecentB.setDate(startRecentB.getDate() - 14);
+  challenges.push({
+    id: 'ch-recent-b',
+    title: '저녁 11시 취침 (데모·최근 종료)',
+    description: '종료 후 일주일 안에만 홈에 표시됩니다.',
+    creatorId: 'user-2',
+    startDate: fmt(startRecentB),
+    endDate: fmt(endRecentB),
+    requiredDaysPerWeek: 5,
+    finePerMiss: 8000,
+    participants: ['user-1', 'user-2', 'user-3'],
+  });
+
   // Seed check-ins for the past days
   const texts = [
     '오늘도 열심히 했습니다! 💪',
@@ -952,49 +985,84 @@ function showTab(name) {
   showScreen(name);
 }
 
+function formatLocalDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function addCalendarDaysYmd(ymd, days) {
+  const x = new Date(ymd + 'T12:00:00');
+  x.setDate(x.getDate() + days);
+  return formatLocalDate(x);
+}
+/** 앱의 isRecentEndedChallenge 와 동일: 종료 후 아직 7일 안 지남 */
+function isRecentEndedChallenge(c, ref) {
+  const todayStr = formatLocalDate(ref);
+  if (todayStr <= c.endDate) return false;
+  const until = addCalendarDaysYmd(c.endDate, 7);
+  return todayStr <= until;
+}
+
+function homeChallengeCardHtml(c) {
+  const now = new Date();
+  const isActive = now >= new Date(c.startDate + 'T12:00:00') && now <= new Date(c.endDate + 'T12:00:00');
+  const isUpcoming = now < new Date(c.startDate + 'T12:00:00');
+  let statusText = isActive ? '진행 중' : isUpcoming ? '예정' : '종료';
+  let statusClass = isActive ? 'status-active' : isUpcoming ? 'status-upcoming' : 'status-ended';
+  const isJoined = c.participants.includes(currentUser.id);
+  return `
+    <div class="challenge-card" onclick="showDetail('${c.id}')">
+      <div class="card-header">
+        <div class="card-title">${escapeHtml(c.title)}</div>
+        <span class="status-badge ${statusClass}">${statusText}</span>
+      </div>
+      <div class="card-desc">${escapeHtml(c.description)}</div>
+      <div class="card-footer">
+        <div class="info-row"><span class="info-label">참여자</span><span class="info-value">${c.participants.length}명</span></div>
+        <div class="info-row"><span class="info-label">주 ${c.requiredDaysPerWeek}회</span><span class="info-value">벌금 ${c.finePerMiss.toLocaleString()}원</span></div>
+        ${isJoined ? '<span class="joined-badge">참여 중</span>' : ''}
+      </div>
+      <div class="date-range">${c.startDate} ~ ${c.endDate}</div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
 // ─── Render Home ───
 function renderHome() {
   const list = document.getElementById('challenge-list');
   const now = new Date();
-  const sorted = [...challenges].sort((a, b) => {
-    const aActive = now >= new Date(a.startDate) && now <= new Date(a.endDate);
-    const bActive = now >= new Date(b.startDate) && now <= new Date(b.endDate);
-    if (aActive && !bActive) return -1;
-    if (!aActive && bActive) return 1;
-    return 0;
-  });
+  const my = challenges.filter((c) => c.participants.includes(currentUser.id));
+  const active = my.filter(
+    (c) => now >= new Date(c.startDate + 'T12:00:00') && now <= new Date(c.endDate + 'T12:00:00')
+  );
+  const recentEnded = my.filter((c) => isRecentEndedChallenge(c, now));
 
-  if (sorted.length === 0) {
+  if (active.length === 0 && recentEnded.length === 0) {
     list.innerHTML = `
       <div class="empty-container">
         <div class="empty-icon">🏆</div>
-        <div class="empty-text">아직 챌린지가 없어요</div>
-        <div class="empty-sub">새 챌린지를 만들어보세요!</div>
+        <div class="empty-text">표시할 챌린지가 없어요</div>
+        <div class="empty-sub">진행 중·종료 후 일주일 이내 챌린이 여기에 나타나요.</div>
       </div>`;
     return;
   }
 
-  list.innerHTML = sorted.map(c => {
-    const isActive = now >= new Date(c.startDate) && now <= new Date(c.endDate);
-    const isUpcoming = now < new Date(c.startDate);
-    const statusText = isActive ? '진행 중' : isUpcoming ? '예정' : '종료';
-    const statusClass = isActive ? 'status-active' : 'status-upcoming';
-    const isJoined = c.participants.includes(currentUser.id);
-    return `
-      <div class="challenge-card" onclick="showDetail('${c.id}')">
-        <div class="card-header">
-          <div class="card-title">${c.title}</div>
-          <span class="status-badge ${statusClass}">${statusText}</span>
-        </div>
-        <div class="card-desc">${c.description}</div>
-        <div class="card-footer">
-          <div class="info-row"><span class="info-label">참여자</span><span class="info-value">${c.participants.length}명</span></div>
-          <div class="info-row"><span class="info-label">주 ${c.requiredDaysPerWeek}회</span><span class="info-value">벌금 ${c.finePerMiss.toLocaleString()}원</span></div>
-          ${isJoined ? '<span class="joined-badge">참여 중</span>' : ''}
-        </div>
-        <div class="date-range">${c.startDate} ~ ${c.endDate}</div>
-      </div>`;
-  }).join('');
+  let html = '';
+  if (active.length > 0) {
+    html += '<div class="section-header">진행 중인 챌린지</div>';
+    html += active.map(homeChallengeCardHtml).join('');
+  }
+  if (recentEnded.length > 0) {
+    html += '<div class="section-header">최근 종료된 챌린지</div>';
+    html += recentEnded.map(homeChallengeCardHtml).join('');
+  }
+  list.innerHTML = html;
 }
 
 // ─── Render My Challenges ───

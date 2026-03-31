@@ -9,11 +9,15 @@ import { useAppContext } from '../store/AppContext';
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import MyChallengesScreen from '../screens/MyChallengesScreen';
+import BoardListScreen from '../screens/BoardListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateChallengeScreen from '../screens/CreateChallengeScreen';
 import ChallengeDetailScreen from '../screens/ChallengeDetailScreen';
+import ChallengeBoardScreen from '../screens/ChallengeBoardScreen';
 import CheckInScreen from '../screens/CheckInScreen';
 import JoinByCodeScreen from '../screens/JoinByCodeScreen';
+import AllMyChallengesScreen from '../screens/AllMyChallengesScreen';
+import MyCheckInHistoryScreen from '../screens/MyCheckInHistoryScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -37,7 +41,9 @@ function MainTabs() {
           if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'MyChallenges') {
-            iconName = focused ? 'trophy' : 'trophy-outline';
+            iconName = focused ? 'today' : 'today-outline';
+          } else if (route.name === 'Board') {
+            iconName = focused ? 'newspaper' : 'newspaper-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -53,7 +59,12 @@ function MainTabs() {
       <Tab.Screen
         name="MyChallenges"
         component={MyChallengesScreen}
-        options={{ tabBarLabel: '내 챌린지' }}
+        options={{ tabBarLabel: '오늘인증' }}
+      />
+      <Tab.Screen
+        name="Board"
+        component={BoardListScreen}
+        options={{ tabBarLabel: '게시판' }}
       />
       <Tab.Screen
         name="Profile"
@@ -87,12 +98,19 @@ export default function AppNavigator() {
           <Stack.Screen
             name="CreateChallenge"
             component={CreateChallengeScreen}
-            options={{ title: '챌린지 만들기' }}
+            options={({ route }) => ({
+              title: route.params?.editChallengeId ? '챌린지 수정' : '챌린지 만들기',
+            })}
           />
           <Stack.Screen
             name="ChallengeDetail"
             component={ChallengeDetailScreen}
             options={{ title: '챌린지 상세' }}
+          />
+          <Stack.Screen
+            name="ChallengeBoard"
+            component={ChallengeBoardScreen}
+            options={{ title: '게시판' }}
           />
           <Stack.Screen
             name="CheckIn"
@@ -103,6 +121,16 @@ export default function AppNavigator() {
             name="JoinByCode"
             component={JoinByCodeScreen}
             options={{ title: '초대 코드 입력' }}
+          />
+          <Stack.Screen
+            name="AllMyChallenges"
+            component={AllMyChallengesScreen}
+            options={{ title: '내 챌린지 전체' }}
+          />
+          <Stack.Screen
+            name="MyCheckInHistory"
+            component={MyCheckInHistoryScreen}
+            options={{ title: '인증 기록' }}
           />
         </Stack.Navigator>
       ) : (

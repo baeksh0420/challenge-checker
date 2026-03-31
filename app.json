@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "챌린지 체커",
+    "name": "챌린지체커",
     "slug": "challenge-checker",
     "scheme": "challengechecker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -27,9 +27,17 @@
         "backgroundColor": "#4F46E5"
       },
       "package": "com.soh.challengechecker",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ]
+    },
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/8acecbba-814d-4747-92c0-f4fc385a1e5e",
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
     },
     "plugins": [
       [

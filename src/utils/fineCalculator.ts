@@ -1,8 +1,5 @@
-import { Challenge, CheckIn, User } from '../types';
+import { Challenge, CheckIn } from '../types';
 
-/**
- * 벌금 계산 결과 타입
- */
 export interface FineResult {
   totalFine: number;
   missedWeeks: number;
@@ -12,19 +9,132 @@ export interface FineResult {
   fineMode: 'weekly' | 'daily';
 }
 
-/**
- * 특정 기간 내 주별/일별 달성 횟수를 계산하고 벌금을 산정합니다.
- */
+/** 로컬(기기) 기준 YYYY-MM-DD — 인증일·오늘·주(월~일) 계산에 통일 */
+export function formatLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function formatDate(date: Date): string {
+  return formatLocalDate(date);
+}
+
+/** 해당 날짜가 속한 주의 월요일(로컬 자정 기준) */
+export function startOfLocalMondayWeek(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = x.getDay();
+  const delta = dow === 0 ? -6 : 1 - dow;
+  x.setDate(x.getDate() + delta);
+  return x;
+}
+
+export function getDatesBetween(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const current = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  while (current <= endDate) {
+    dates.push(formatLocalDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
+}
+
+/** dayInWeek가 속한 월~일 주와 [rangeStart, rangeEnd]의 교집합 날짜들 */
+export function datesInMondayWeekWithinRange(
+  dayInWeek: Date,
+  rangeStart: string,
+  rangeEnd: string
+): string[] {
+  const mon = startOfLocalMondayWeek(dayInWeek);
+  const sun = new Date(mon);
+  sun.setDate(sun.getDate() + 6);
+  const ws = formatLocalDate(mon);
+  const we = formatLocalDate(sun);
+  const lo = ws > rangeStart ? ws : rangeStart;
+  const hi = we < rangeEnd ? we : rangeEnd;
+  if (lo > hi) return [];
+  return getDatesBetween(lo, hi);
+}
+
+export function countCheckInsOnDates(
+  challengeId: string,
+  userId: string,
+  checkIns: CheckIn[],
+  dates: string[]
+): number {
+  const set = new Set(
+    checkIns
+      .filter((c) => c.challengeId === challengeId && c.userId === userId)
+      .map((c) => c.date)
+  );
+  let n = 0;
+  for (const d of dates) {
+    if (set.has(d)) n++;
+  }
+  return n;
+}
+
+export function getWeeklyProgressThisMondayWeek(
+  challenge: Challenge,
+  userId: string,
+  checkIns: CheckIn[],
+  refDay: Date
+): { current: number; required: number } {
+  const required = challenge.requiredDaysPerWeek;
+  const dates = datesInMondayWeekWithinRange(refDay, challenge.startDate, challenge.endDate);
+  const current = countCheckInsOnDates(challenge.id, userId, checkIns, dates);
+  return { current, required };
+}
+
+/** 내 챌린지 탭: 일당 — 오늘(로컬) 인증 필요 */
+export function needsDailyReminder(
+  challenge: Challenge,
+  userId: string,
+  checkIns: CheckIn[],
+  todayStr: string
+): boolean {
+  if ((challenge.fineMode ?? 'weekly') !== 'daily') return false;
+  const now = new Date(`${todayStr}T12:00:00`);
+  if (now < new Date(`${challenge.startDate}T12:00:00`)) return false;
+  if (now > new Date(`${challenge.endDate}T12:00:00`)) return false;
+  const excluded = new Set(challenge.excludedDays ?? []);
+  const dow = new Date(`${todayStr}T12:00:00`).getDay();
+  if (excluded.has(dow)) return false;
+  const done = checkIns.some(
+    (c) => c.challengeId === challenge.id && c.userId === userId && c.date === todayStr
+  );
+  return !done;
+}
+
+/** 내 챌린지 탭: 주당 — 이번 주(월~일) 목표 미달성 */
+export function needsWeeklyReminder(
+  challenge: Challenge,
+  userId: string,
+  checkIns: CheckIn[],
+  refDay: Date
+): boolean {
+  if ((challenge.fineMode ?? 'weekly') !== 'weekly') return false;
+  const now = new Date(formatLocalDate(refDay) + 'T12:00:00');
+  if (now < new Date(`${challenge.startDate}T12:00:00`)) return false;
+  if (now > new Date(`${challenge.endDate}T12:00:00`)) return false;
+  const { current, required } = getWeeklyProgressThisMondayWeek(challenge, userId, checkIns, refDay);
+  return current < required;
+}
+
 export function calculateFine(
   challenge: Challenge,
   userId: string,
   checkIns: CheckIn[]
 ): FineResult {
-  const start = new Date(challenge.startDate);
-  const end = new Date(challenge.endDate);
+  const startD = new Date(`${challenge.startDate}T12:00:00`);
+  const endD = new Date(`${challenge.endDate}T12:00:00`);
   const now = new Date();
-  const effectiveEnd = now < end ? now : end;
+  const effectiveEndD = now < endD ? now : endD;
   const fineMode = challenge.fineMode ?? 'weekly';
+  /** 해당 인증일(의 날)이 끝난 뒤(다음날 0시 이후)부터만 미인증·미달로 벌금 집계 */
+  const todayStr = formatLocalDate(now);
 
   const userCheckIns = checkIns.filter(
     (c) => c.challengeId === challenge.id && c.userId === userId
@@ -32,45 +142,49 @@ export function calculateFine(
   const checkInDates = new Set(userCheckIns.map((c) => c.date));
   const excludedDays = new Set(challenge.excludedDays ?? []);
 
-  // 주별 통계 (주당 벌금 모드용)
+  const startStr = formatLocalDate(startD);
+  const effStr = formatLocalDate(effectiveEndD);
+
   let totalWeeks = 0;
   let missedWeeks = 0;
-  let weekStart = new Date(start);
+  let weekMon = startOfLocalMondayWeek(startD);
 
-  while (weekStart <= effectiveEnd) {
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    const effectiveWeekEnd = weekEnd > effectiveEnd ? effectiveEnd : weekEnd;
-
-    let daysInWeek = 0;
-    const day = new Date(weekStart);
-    while (day <= effectiveWeekEnd) {
-      const dateStr = day.toISOString().split('T')[0];
-      if (checkInDates.has(dateStr)) {
-        daysInWeek++;
+  while (true) {
+    const ws = formatLocalDate(weekMon);
+    if (ws > effStr) break;
+    const sun = new Date(weekMon);
+    sun.setDate(sun.getDate() + 6);
+    const we = formatLocalDate(sun);
+    const segStart = ws > startStr ? ws : startStr;
+    const segEnd = we < effStr ? we : effStr;
+    if (segStart <= segEnd) {
+      let daysInWeek = 0;
+      for (const ds of getDatesBetween(segStart, segEnd)) {
+        if (checkInDates.has(ds)) daysInWeek++;
       }
-      day.setDate(day.getDate() + 1);
+      if (segEnd < todayStr) {
+        totalWeeks++;
+        if (daysInWeek < challenge.requiredDaysPerWeek) missedWeeks++;
+      }
     }
-
-    totalWeeks++;
-    if (daysInWeek < challenge.requiredDaysPerWeek) {
-      missedWeeks++;
-    }
-
-    weekStart.setDate(weekStart.getDate() + 7);
+    weekMon.setDate(weekMon.getDate() + 7);
   }
 
-  // 일별 통계 (일당 벌금 모드용) - 제외 요일 스킵
   let totalDays = 0;
   let missedDays = 0;
-  const dayIter = new Date(start);
-  while (dayIter <= effectiveEnd) {
+  const dayIter = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate());
+  const lastDay = new Date(
+    effectiveEndD.getFullYear(),
+    effectiveEndD.getMonth(),
+    effectiveEndD.getDate()
+  );
+  while (dayIter <= lastDay) {
     const dayOfWeek = dayIter.getDay();
     if (!excludedDays.has(dayOfWeek)) {
-      totalDays++;
-      const dateStr = dayIter.toISOString().split('T')[0];
-      if (!checkInDates.has(dateStr)) {
-        missedDays++;
+      const dateStr = formatLocalDate(dayIter);
+      if (dateStr < todayStr) {
+        totalDays++;
+        if (!checkInDates.has(dateStr)) missedDays++;
       }
     }
     dayIter.setDate(dayIter.getDate() + 1);
@@ -89,21 +203,6 @@ export function calculateFine(
     totalDays,
     fineMode,
   };
-}
-
-export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-export function getDatesBetween(start: string, end: string): string[] {
-  const dates: string[] = [];
-  const current = new Date(start);
-  const endDate = new Date(end);
-  while (current <= endDate) {
-    dates.push(formatDate(current));
-    current.setDate(current.getDate() + 1);
-  }
-  return dates;
 }
 
 export function getDaysInMonth(year: number, month: number): number {

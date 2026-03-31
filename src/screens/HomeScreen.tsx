@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
@@ -10,45 +10,58 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
-import { RootStackParamList } from '../types';
+import { Challenge, RootStackParamList } from '../types';
 import ChallengeCard from '../components/ChallengeCard';
+import { challengeHasParticipant } from '../utils/challengeGuards';
+import { isRecentEndedChallenge } from '../utils/challengeLifecycle';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+type Section = { title: string; data: Challenge[] };
 
 export default function HomeScreen() {
   const { state } = useAppContext();
   const navigation = useNavigation<Nav>();
 
-  const myChallenges = state.challenges.filter((c) =>
-    state.currentUser ? c.participants.includes(state.currentUser.id) : false
-  );
-
-  const activeChallenges = myChallenges.filter((c) => {
+  const { activeChallenges, recentEndedChallenges } = useMemo(() => {
     const now = new Date();
-    return now >= new Date(c.startDate) && now <= new Date(c.endDate);
-  });
+    const my = state.challenges.filter((c) =>
+      challengeHasParticipant(c, state.currentUser?.id)
+    );
+    const active = my.filter(
+      (c) => now >= new Date(c.startDate) && now <= new Date(c.endDate)
+    );
+    const recent = my.filter((c) => isRecentEndedChallenge(c, now));
+    return { activeChallenges: active, recentEndedChallenges: recent };
+  }, [state.challenges, state.currentUser?.id]);
 
-  const upcomingChallenges = myChallenges.filter(
-    (c) => new Date() < new Date(c.startDate)
-  );
+  const sections = useMemo((): Section[] => {
+    const out: Section[] = [];
+    if (activeChallenges.length > 0) {
+      out.push({ title: '진행 중인 챌린지', data: activeChallenges });
+    }
+    if (recentEndedChallenges.length > 0) {
+      out.push({ title: '최근 종료된 챌린지', data: recentEndedChallenges });
+    }
+    return out;
+  }, [activeChallenges, recentEndedChallenges]);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>챌린지 체커</Text>
+        <Text style={styles.headerTitle}>챌린지체커</Text>
       </View>
 
-      <FlatList
-        data={[...activeChallenges, ...upcomingChallenges]}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section: { title } }) => (
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {activeChallenges.length > 0 ? '진행 중인 챌린지' : '등록된 챌린지가 없습니다'}
-            </Text>
+            <Text style={styles.sectionTitle}>{title}</Text>
           </View>
-        }
+        )}
         renderItem={({ item }) => (
           <ChallengeCard
             challenge={item}
@@ -60,8 +73,11 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🏆</Text>
-            <Text style={styles.emptyText}>아직 챌린지가 없어요</Text>
-            <Text style={styles.emptySubText}>새 챌린지를 만들어보세요!</Text>
+            <Text style={styles.emptyText}>표시할 챌린지가 없어요</Text>
+            <Text style={styles.emptySubText}>
+              진행 중·종료 후 일주일 이내 챌린이 여기에 나타나요.{'\n'}
+              그 외는 프로필의「전체 챌린지」에서 볼 수 있어요.
+            </Text>
           </View>
         }
       />
@@ -104,7 +120,8 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   sectionTitle: {
     fontSize: 16,
@@ -114,6 +131,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 80,
+    paddingHorizontal: 20,
   },
   emptyIcon: {
     fontSize: 64,
@@ -124,10 +142,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 4,
+    textAlign: 'center',
   },
   emptySubText: {
     fontSize: 14,
     color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   fabRow: {
     position: 'absolute',

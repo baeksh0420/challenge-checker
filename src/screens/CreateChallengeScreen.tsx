@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,25 +10,58 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList, Challenge } from '../types';
 import { formatDate } from '../utils/fineCalculator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type CreateRoute = RouteProp<RootStackParamList, 'CreateChallenge'>;
+
+function defaultEndDate(start: Date): Date {
+  const d = new Date(start);
+  d.setDate(d.getDate() + 27);
+  return d;
+}
+
+function parseYmd(s: string): Date | null {
+  const t = s.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const d = new Date(`${t}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 export default function CreateChallengeScreen() {
   const { state, actions } = useAppContext();
   const navigation = useNavigation<Nav>();
+  const route = useRoute<CreateRoute>();
+  const editChallengeId = route.params?.editChallengeId;
+  const editingChallenge = editChallengeId
+    ? state.challenges.find((c) => c.id === editChallengeId)
+    : undefined;
 
+  const today = new Date();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [durationWeeks, setDurationWeeks] = useState('4');
+  const [startDateStr, setStartDateStr] = useState(formatDate(today));
+  const [endDateStr, setEndDateStr] = useState(formatDate(defaultEndDate(today)));
   const [requiredDays, setRequiredDays] = useState('5');
   const [fineMode, setFineMode] = useState<'weekly' | 'daily'>('weekly');
   const [excludedDays, setExcludedDays] = useState<number[]>([]);
   const [fineAmount, setFineAmount] = useState('10000');
+
+  useEffect(() => {
+    if (!editingChallenge) return;
+    setTitle(editingChallenge.title);
+    setDescription(editingChallenge.description ?? '');
+    setStartDateStr(editingChallenge.startDate);
+    setEndDateStr(editingChallenge.endDate);
+    setRequiredDays(String(editingChallenge.requiredDaysPerWeek));
+    setFineMode(editingChallenge.fineMode ?? 'weekly');
+    setExcludedDays(editingChallenge.excludedDays ?? []);
+    setFineAmount(String(editingChallenge.finePerMiss));
+  }, [editingChallenge?.id]);
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -37,18 +70,48 @@ export default function CreateChallengeScreen() {
     }
     if (!state.currentUser) return;
 
-    const weeks = parseInt(durationWeeks, 10) || 4;
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + weeks * 7 - 1);
+    if (editChallengeId && !editingChallenge) {
+      Alert.alert('알림', '챌린지 정보를 불러올 수 없습니다.');
+      return;
+    }
+
+    const startD = parseYmd(startDateStr);
+    const endD = parseYmd(endDateStr);
+    if (!startD || !endD) {
+      Alert.alert('알림', '시작일·종료일을 YYYY-MM-DD 형식으로 입력해 주세요.');
+      return;
+    }
+    const startNorm = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate());
+    const endNorm = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate());
+    if (startNorm > endNorm) {
+      Alert.alert('알림', '종료일이 시작일보다 빠를 수 없습니다.');
+      return;
+    }
+
+    if (editChallengeId && editingChallenge) {
+      const updated: Challenge = {
+        ...editingChallenge,
+        title: title.trim(),
+        description: description.trim(),
+        startDate: formatDate(startNorm),
+        endDate: formatDate(endNorm),
+        requiredDaysPerWeek: Math.min(parseInt(requiredDays, 10) || 5, 7),
+        fineMode,
+        excludedDays: fineMode === 'daily' ? excludedDays : [],
+        finePerMiss: parseInt(fineAmount, 10) || 10000,
+      };
+      await actions.updateChallenge(updated);
+      navigation.goBack();
+      return;
+    }
 
     const challenge: Challenge = {
       id: `challenge-${Date.now()}`,
       title: title.trim(),
       description: description.trim(),
       creatorId: state.currentUser.id,
-      startDate: formatDate(startDate),
-      endDate: formatDate(endDate),
+      startDate: formatDate(startNorm),
+      endDate: formatDate(endNorm),
       requiredDaysPerWeek: Math.min(parseInt(requiredDays, 10) || 5, 7),
       fineMode,
       excludedDays: fineMode === 'daily' ? excludedDays : [],
@@ -65,7 +128,9 @@ export default function CreateChallengeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.screenTitle}>새 챌린지 만들기</Text>
+        <Text style={styles.screenTitle}>
+          {editChallengeId ? '챌린지 수정' : '새 챌린지 만들기'}
+        </Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>챌린지 이름 *</Text>
@@ -90,28 +155,30 @@ export default function CreateChallengeScreen() {
           />
         </View>
 
-        <View style={styles.row}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>기간 (주)</Text>
-            <TextInput
-              style={styles.input}
-              value={durationWeeks}
-              onChangeText={setDurationWeeks}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-          </View>
-          <View style={{ width: 12 }} />
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.label}>주당 필수 횟수</Text>
-            <TextInput
-              style={styles.input}
-              value={requiredDays}
-              onChangeText={setRequiredDays}
-              keyboardType="number-pad"
-              maxLength={1}
-            />
-          </View>
+        <View style={styles.field}>
+          <Text style={styles.label}>시작일 * (YYYY-MM-DD)</Text>
+          <TextInput
+            style={styles.input}
+            value={startDateStr}
+            onChangeText={setStartDateStr}
+            placeholder="2026-01-01"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={10}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>종료일 * (YYYY-MM-DD)</Text>
+          <TextInput
+            style={styles.input}
+            value={endDateStr}
+            onChangeText={setEndDateStr}
+            placeholder="2026-01-28"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={10}
+          />
         </View>
 
         <View style={styles.field}>
@@ -150,9 +217,27 @@ export default function CreateChallengeScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.modeHint}>
+            {fineMode === 'weekly'
+              ? '주당: 집계 주간은 월요일~일요일(기기 로컬 시간) 기준입니다.'
+              : '일당: 제외하지 않은 요일에 인증하지 않으면 벌금이 적용됩니다.'}
+          </Text>
         </View>
 
-        {fineMode === 'daily' && (
+        {fineMode === 'weekly' ? (
+          <View style={styles.field}>
+            <Text style={styles.label}>주당 필수 횟수 (이번 주 목표)</Text>
+            <TextInput
+              style={styles.input}
+              value={requiredDays}
+              onChangeText={setRequiredDays}
+              keyboardType="number-pad"
+              maxLength={1}
+            />
+          </View>
+        ) : null}
+
+        {fineMode === 'daily' ? (
           <View style={styles.field}>
             <Text style={styles.label}>제외 요일 (선택한 요일은 벌금 없음)</Text>
             <View style={styles.dayRow}>
@@ -186,7 +271,7 @@ export default function CreateChallengeScreen() {
               })}
             </View>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.field}>
           <Text style={styles.label}>
@@ -202,7 +287,9 @@ export default function CreateChallengeScreen() {
         </View>
 
         <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
-          <Text style={styles.createBtnText}>챌린지 생성</Text>
+          <Text style={styles.createBtnText}>
+            {editChallengeId ? '변경 사항 저장' : '챌린지 생성'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -254,9 +341,6 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  row: {
-    flexDirection: 'row',
-  },
   createBtn: {
     backgroundColor: '#4F46E5',
     borderRadius: 14,
@@ -300,6 +384,12 @@ const styles = StyleSheet.create({
   },
   toggleBtnTextActive: {
     color: '#FFFFFF',
+  },
+  modeHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 8,
+    lineHeight: 17,
   },
   dayRow: {
     flexDirection: 'row',

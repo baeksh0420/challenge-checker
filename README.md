@@ -1,4 +1,4 @@
-# 챌린지 체커 (Challenge Checker)
+# 챌린지체커 (Challenge Checker)
 
 다수의 사용자가 공동 목표를 가지고 챌린지를 진행하도록 도와주는 앱입니다.
 

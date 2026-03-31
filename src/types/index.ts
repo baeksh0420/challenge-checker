@@ -1,7 +1,13 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export interface User {
   id: string;
+  /** 로그인 아이디(이메일). Firebase Auth와 동일하게 둡니다. */
+  email: string;
   name: string;
   avatarColor: string;
+  /** 프로필 사진(Firebase Storage URL) */
+  photoURL?: string;
 }
 
 export interface Challenge {
@@ -10,9 +16,10 @@ export interface Challenge {
   description: string;
   creatorId: string;
   startDate: string; // ISO date string
-  endDate: string;   // ISO date string
+  endDate: string; // ISO date string
   requiredDaysPerWeek: number; // 주당 필수 수행 횟수
-  fineMode: 'weekly' | 'daily'; // 벌금 모드: 주당 or 일당
+  /** weekly: 주간은 월~일(로컬) 기준 */
+  fineMode: 'weekly' | 'daily';
   excludedDays: number[]; // 제외 요일 (0=일, 1=월, ..., 6=토) - 일당 모드용
   finePerMiss: number; // 미달성 시 벌금 (원)
   inviteCode: string; // 초대 코드 (6자리)
@@ -30,16 +37,24 @@ export interface CheckIn {
   createdAt: string;
 }
 
-export type RootStackParamList = {
-  MainTabs: undefined;
-  CreateChallenge: undefined;
-  ChallengeDetail: { challengeId: string };
-  CheckIn: { challengeId: string };
-  JoinByCode: undefined;
-};
-
 export type MainTabParamList = {
   Home: undefined;
   MyChallenges: undefined;
+  Board: undefined;
   Profile: undefined;
+};
+
+export type RootStackParamList = {
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
+  /** 수정 시 `editChallengeId` 전달 */
+  CreateChallenge: { editChallengeId?: string } | undefined;
+  ChallengeDetail: { challengeId: string };
+  ChallengeBoard: { challengeId: string };
+  /** `date` 미지정 시 오늘(로컬) */
+  CheckIn: { challengeId: string; date?: string };
+  JoinByCode: undefined;
+  /** 참여한 모든 챌린지(진행·예정·종료) */
+  AllMyChallenges: undefined;
+  /** 내 인증 전체 기록 */
+  MyCheckInHistory: undefined;
 };

@@ -24,22 +24,54 @@ const CHALLENGES = 'challenges';
 const CHECKINS = 'checkIns';
 
 // ─── Users ───
+function normalizeUserDoc(data: Record<string, unknown>, id: string): User {
+  const photoURL =
+    typeof data.photoURL === 'string' && data.photoURL.length > 0
+      ? data.photoURL
+      : undefined;
+  return {
+    id,
+    email: typeof data.email === 'string' ? data.email : '',
+    name: typeof data.name === 'string' ? data.name : '사용자',
+    avatarColor: typeof data.avatarColor === 'string' ? data.avatarColor : '#6B7280',
+    ...(photoURL ? { photoURL } : {}),
+  };
+}
+
 export async function createUser(user: User): Promise<void> {
   await setDoc(doc(db, USERS, user.id), user);
 }
 
 export async function getUser(userId: string): Promise<User | null> {
   const snap = await getDoc(doc(db, USERS, userId));
-  return snap.exists() ? (snap.data() as User) : null;
+  if (!snap.exists()) return null;
+  return normalizeUserDoc(snap.data() as Record<string, unknown>, snap.id);
 }
 
 export async function updateUserName(userId: string, name: string): Promise<void> {
   await updateDoc(doc(db, USERS, userId), { name });
 }
 
+export async function updateUserProfile(
+  userId: string,
+  fields: { email?: string; name?: string; photoURL?: string | null }
+): Promise<void> {
+  await updateDoc(doc(db, USERS, userId), fields);
+}
+
+export async function uploadUserAvatar(userId: string, uri: string): Promise<string> {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const imageRef = ref(storage, `avatars/${userId}.jpg`);
+  await uploadBytes(imageRef, blob);
+  return getDownloadURL(imageRef);
+}
+
 export function subscribeUsers(callback: (users: User[]) => void): Unsubscribe {
   return onSnapshot(collection(db, USERS), (snapshot) => {
-    const users = snapshot.docs.map((d) => d.data() as User);
+    const users = snapshot.docs.map((d) =>
+      normalizeUserDoc(d.data() as Record<string, unknown>, d.id)
+    );
     callback(users);
   });
 }
@@ -62,6 +94,20 @@ export async function createChallenge(challenge: Challenge): Promise<string> {
     createdAt: serverTimestamp(),
   });
   return challenge.id;
+}
+
+export async function updateChallenge(challenge: Challenge): Promise<void> {
+  const ref = doc(db, CHALLENGES, challenge.id);
+  await updateDoc(ref, {
+    title: challenge.title,
+    description: challenge.description,
+    startDate: challenge.startDate,
+    endDate: challenge.endDate,
+    requiredDaysPerWeek: challenge.requiredDaysPerWeek,
+    fineMode: challenge.fineMode,
+    excludedDays: challenge.excludedDays,
+    finePerMiss: challenge.finePerMiss,
+  });
 }
 
 export async function joinChallenge(challengeId: string, userId: string): Promise<void> {

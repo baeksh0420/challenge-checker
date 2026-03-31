@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -28,13 +28,24 @@ export default function CheckInScreen() {
   const [textContent, setTextContent] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
 
-  const today = formatDate(new Date());
+  const checkInDate = route.params.date ?? formatDate(new Date());
+  const isPastOrToday = checkInDate <= formatDate(new Date());
 
-  const existingCheckIn = state.checkIns.find(
-    (ci) =>
-      ci.challengeId === route.params.challengeId &&
-      ci.userId === state.currentUser?.id &&
-      ci.date === today
+  useEffect(() => {
+    setType('text');
+    setTextContent('');
+    setImageUri(null);
+  }, [checkInDate, route.params.challengeId]);
+
+  const existingCheckIn = useMemo(
+    () =>
+      state.checkIns.find(
+        (ci) =>
+          ci.challengeId === route.params.challengeId &&
+          ci.userId === state.currentUser?.id &&
+          ci.date === checkInDate
+      ),
+    [state.checkIns, route.params.challengeId, state.currentUser?.id, checkInDate]
   );
 
   const pickImage = async () => {
@@ -75,6 +86,10 @@ export default function CheckInScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!isPastOrToday) {
+      Alert.alert('알림', '오늘 이후 날짜에는 인증할 수 없습니다.');
+      return;
+    }
     if (type === 'text' && !textContent.trim()) {
       Alert.alert('알림', '인증 내용을 입력해주세요.');
       return;
@@ -91,28 +106,30 @@ export default function CheckInScreen() {
       id: `checkin-${Date.now()}`,
       challengeId: route.params.challengeId,
       userId: state.currentUser.id,
-      date: today,
+      date: checkInDate,
       type,
       content: type === 'text' ? textContent.trim() : '',
       createdAt: new Date().toISOString(),
     };
 
     await actions.addCheckIn(checkIn, localUri);
-    Alert.alert('완료', '오늘의 인증이 등록되었습니다!', [
-      { text: '확인', onPress: () => navigation.goBack() },
-    ]);
+    const doneMsg =
+      checkInDate === formatDate(new Date())
+        ? '오늘의 인증이 등록되었습니다!'
+        : `${checkInDate} 인증이 등록되었습니다!`;
+    Alert.alert('완료', doneMsg, [{ text: '확인', onPress: () => navigation.goBack() }]);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.screenTitle}>오늘의 챌린지 인증</Text>
-        <Text style={styles.dateText}>{today}</Text>
+        <Text style={styles.screenTitle}>챌린지 인증</Text>
+        <Text style={styles.dateText}>인증일: {checkInDate}</Text>
 
         {existingCheckIn && (
           <View style={styles.existingBanner}>
             <Text style={styles.existingText}>
-              오늘 이미 인증했습니다. 다시 제출하면 기존 인증이 교체됩니다.
+              이 날짜에 이미 인증했습니다. 다시 제출하면 기존 인증이 교체됩니다.
             </Text>
           </View>
         )}

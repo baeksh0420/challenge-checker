@@ -5,13 +5,14 @@ import React, {
   useEffect,
   ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
 import { Challenge, CheckIn, User } from '../types';
+import { challengeHasParticipant } from '../utils/challengeGuards';
 import {
   subscribeChallenges,
   subscribeCheckIns,
   subscribeUsers,
   createChallenge as fbCreateChallenge,
+  updateChallenge as fbUpdateChallenge,
   joinChallenge as fbJoinChallenge,
   addCheckIn as fbAddCheckIn,
   createUser as fbCreateUser,
@@ -20,18 +21,19 @@ import {
   getUser as fbGetUser,
   deleteChallenge as fbDeleteChallenge,
   findChallengeByInviteCode,
+  updateUserProfile as fbUpdateUserProfile,
+  uploadUserAvatar,
 } from '../firebase/firestore';
 import { auth } from '../firebase/config';
 import {
   onAuthStateChanged,
-  signInWithPopup,
-  signInWithCredential,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut as fbSignOut,
-  GoogleAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
 
-// ─── State ───
 interface AppState {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
@@ -52,11 +54,10 @@ const initialState: AppState = {
   checkIns: [],
 };
 
-// ─── Actions ───
 type Action =
   | { type: 'SET_AUTH_LOADING'; payload: boolean }
   | { type: 'SET_FIREBASE_USER'; payload: FirebaseUser | null }
-  | { type: 'SET_CURRENT_USER'; payload: User }
+  | { type: 'SET_CURRENT_USER'; payload: User | null }
   | { type: 'SET_USERS'; payload: User[] }
   | { type: 'SET_CHALLENGES'; payload: Challenge[] }
   | { type: 'SET_CHECKINS'; payload: CheckIn[] };
@@ -80,18 +81,23 @@ function appReducer(state: AppState, action: Action): AppState {
   }
 }
 
-// ─── Context ───
 interface AppContextType {
   state: AppState;
   dispatch: React.Dispatch<Action>;
   actions: {
-    signInWithGoogle: () => Promise<void>;
-    signInWithGoogleIdToken: (idToken: string) => Promise<void>;
+    signInWithEmailPassword: (email: string, password: string) => Promise<void>;
+    signUpWithEmailPassword: (
+      email: string,
+      password: string,
+      displayName: string
+    ) => Promise<void>;
     signOut: () => Promise<void>;
     createChallenge: (challenge: Challenge) => Promise<void>;
+    updateChallenge: (challenge: Challenge) => Promise<void>;
     joinChallenge: (challengeId: string) => Promise<void>;
     addCheckIn: (checkIn: CheckIn, localImageUri?: string) => Promise<void>;
     updateUserName: (name: string) => Promise<void>;
+    updateUserPhoto: (localImageUri: string) => Promise<void>;
     deleteChallenge: (challengeId: string) => Promise<void>;
     joinByCode: (code: string) => Promise<{ success: boolean; message: string }>;
   };
@@ -102,25 +108,46 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
-  // ─── Firebase Auth (Google 로그인) ───
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
           dispatch({ type: 'SET_FIREBASE_USER', payload: firebaseUser });
-          let user = await fbGetUser(firebaseUser.uid);
-          if (!user) {
-            const colorIndex = Math.floor(Math.random() * COLORS.length);
-            user = {
+          const email = firebaseUser.email ?? '';
+          const existing = await fbGetUser(firebaseUser.uid);
+          const nameFromAuth =
+            firebaseUser.displayName ??
+            (email ? email.split('@')[0] : '사용자');
+
+          if (!existing) {
+            const user: User = {
               id: firebaseUser.uid,
-              name: firebaseUser.displayName ?? '사용자',
-              avatarColor: COLORS[colorIndex],
+              email,
+              name: nameFromAuth,
+              avatarColor: COLORS[Math.floor(Math.random() * COLORS.length)],
             };
             await fbCreateUser(user);
+            dispatch({ type: 'SET_CURRENT_USER', payload: user });
+          } else {
+            const merged: User = {
+              ...existing,
+              email: email || existing.email,
+              name: firebaseUser.displayName ?? existing.name ?? nameFromAuth,
+            };
+            if (
+              merged.email !== existing.email ||
+              merged.name !== existing.name
+            ) {
+              await fbUpdateUserProfile(firebaseUser.uid, {
+                email: merged.email,
+                name: merged.name,
+              });
+            }
+            dispatch({ type: 'SET_CURRENT_USER', payload: merged });
           }
-          dispatch({ type: 'SET_CURRENT_USER', payload: user });
         } else {
           dispatch({ type: 'SET_FIREBASE_USER', payload: null });
+          dispatch({ type: 'SET_CURRENT_USER', payload: null });
         }
       } catch (error) {
         console.error('Auth error:', error);
@@ -130,7 +157,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => unsubAuth();
   }, []);
 
-  // ─── Firestore 실시간 구독 ───
   useEffect(() => {
     const unsubUsers = subscribeUsers((users) => {
       dispatch({ type: 'SET_USERS', payload: users });
@@ -148,25 +174,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // ─── Actions ───
   const actions = {
-    signInWithGoogle: async () => {
-      if (Platform.OS !== 'web') {
-        throw new Error('Native sign-in uses OAuth flow from LoginScreen.');
-      }
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+    signInWithEmailPassword: async (email: string, password: string) => {
+      await signInWithEmailAndPassword(auth, email, password);
     },
-    signInWithGoogleIdToken: async (idToken: string) => {
-      const credential = GoogleAuthProvider.credential(idToken);
-      await signInWithCredential(auth, credential);
+    signUpWithEmailPassword: async (
+      email: string,
+      password: string,
+      displayName: string
+    ) => {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(cred.user, { displayName });
     },
     signOut: async () => {
       await fbSignOut(auth);
       dispatch({ type: 'SET_FIREBASE_USER', payload: null });
+      dispatch({ type: 'SET_CURRENT_USER', payload: null });
     },
     createChallenge: async (challenge: Challenge) => {
       await fbCreateChallenge(challenge);
+    },
+    updateChallenge: async (challenge: Challenge) => {
+      await fbUpdateChallenge(challenge);
     },
     joinChallenge: async (challengeId: string) => {
       if (!state.currentUser) return;
@@ -192,6 +221,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         payload: { ...state.currentUser, name },
       });
     },
+    updateUserPhoto: async (localImageUri: string) => {
+      const u = state.currentUser;
+      const fu = auth.currentUser;
+      if (!u || !fu) return;
+      const url = await uploadUserAvatar(u.id, localImageUri);
+      await fbUpdateUserProfile(u.id, { photoURL: url });
+      await updateProfile(fu, { photoURL: url });
+      dispatch({
+        type: 'SET_CURRENT_USER',
+        payload: { ...u, photoURL: url },
+      });
+    },
     deleteChallenge: async (challengeId: string) => {
       await fbDeleteChallenge(challengeId);
     },
@@ -199,7 +240,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!state.currentUser) return { success: false, message: '로그인이 필요합니다.' };
       const challenge = await findChallengeByInviteCode(code);
       if (!challenge) return { success: false, message: '존재하지 않는 초대 코드입니다.' };
-      if (challenge.participants.includes(state.currentUser.id)) {
+      if (challengeHasParticipant(challenge, state.currentUser.id)) {
         return { success: false, message: '이미 참여 중인 챌린지입니다.' };
       }
       await fbJoinChallenge(challenge.id, state.currentUser.id);

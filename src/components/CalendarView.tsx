@@ -1,21 +1,33 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { getDaysInMonth, getFirstDayOfMonth } from '../utils/fineCalculator';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  getDaysInMonth,
+  getFirstDayOfMonth,
+  formatLocalDate,
+} from '../utils/fineCalculator';
 
 interface CalendarViewProps {
   checkedDates: Set<string>;
   challengeStart: string;
   challengeEnd: string;
   accentColor?: string;
+  /** 인증 완료된 날짜 탭 시 (전체 인증 내역 모달 등) */
+  onPressCheckedDate?: (dateStr: string) => void;
+  /** 기간 내·아직 인증 없는 날 탭 시 (과거/오늘 보충 인증 등) */
+  onPressUncheckedInRangeDate?: (dateStr: string) => void;
 }
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+/** 달력 헤더: 주는 월~일 기준으로 표시 (월요일 시작) */
+const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 export default function CalendarView({
   checkedDates,
   challengeStart,
   challengeEnd,
   accentColor = '#4F46E5',
+  onPressCheckedDate,
+  onPressUncheckedInRangeDate,
 }: CalendarViewProps) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -23,52 +35,105 @@ export default function CalendarView({
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
+  /** JS getDay: 일=0 … 토=6 → 월요일 시작 그리드용 왼쪽 패딩 */
+  const leadingEmpty = (firstDay + 6) % 7;
   const monthName = `${year}년 ${month + 1}월`;
 
   const goToPrevMonth = () => {
-    if (month === 0) { setYear(year - 1); setMonth(11); }
-    else setMonth(month - 1);
+    if (month === 0) {
+      setYear(year - 1);
+      setMonth(11);
+    } else setMonth(month - 1);
   };
   const goToNextMonth = () => {
-    if (month === 11) { setYear(year + 1); setMonth(0); }
-    else setMonth(month + 1);
+    if (month === 11) {
+      setYear(year + 1);
+      setMonth(0);
+    } else setMonth(month + 1);
   };
 
   const renderDays = () => {
     const cells: React.ReactNode[] = [];
 
-    // 빈 셀
-    for (let i = 0; i < firstDay; i++) {
+    for (let i = 0; i < leadingEmpty; i++) {
       cells.push(<View key={`empty-${i}`} style={styles.dayCell} />);
     }
 
+    const todayStr = formatLocalDate(today);
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const isChecked = checkedDates.has(dateStr);
-      const isToday = dateStr === today.toISOString().split('T')[0];
+      const isToday = dateStr === todayStr;
       const isInRange = dateStr >= challengeStart && dateStr <= challengeEnd;
 
-      cells.push(
-        <View key={day} style={styles.dayCell}>
-          <View
-            style={[
-              styles.dayCircle,
-              isChecked && { backgroundColor: accentColor },
-              isToday && !isChecked && styles.todayCircle,
-              !isInRange && styles.outOfRange,
-            ]}
-          >
+      const circle = (
+        <View
+          style={[
+            styles.dayCircle,
+            isChecked && {
+              borderWidth: 2,
+              borderColor: accentColor,
+              backgroundColor: '#FFFFFF',
+            },
+            isToday && !isChecked && isInRange && styles.todayCircle,
+            !isInRange && styles.outOfRange,
+          ]}
+        >
+          {isChecked ? (
+            <>
+              <Text
+                style={[
+                  styles.dayNumWithCheck,
+                  { color: accentColor },
+                  !isInRange && styles.outOfRangeText,
+                ]}
+              >
+                {day}
+              </Text>
+              <Ionicons name="checkmark" size={13} color={accentColor} />
+            </>
+          ) : (
             <Text
               style={[
                 styles.dayText,
-                isChecked && styles.checkedDayText,
-                isToday && !isChecked && { color: accentColor },
+                isToday && isInRange && { color: accentColor, fontWeight: '700' },
                 !isInRange && styles.outOfRangeText,
               ]}
             >
               {day}
             </Text>
-          </View>
+          )}
+        </View>
+      );
+
+      const canPressChecked =
+        isInRange && isChecked && typeof onPressCheckedDate === 'function';
+      const canPressUnchecked =
+        isInRange &&
+        !isChecked &&
+        typeof onPressUncheckedInRangeDate === 'function';
+
+      cells.push(
+        <View key={day} style={styles.dayCell}>
+          {canPressChecked ? (
+            <TouchableOpacity
+              onPress={() => onPressCheckedDate?.(dateStr)}
+              accessibilityRole="button"
+              accessibilityLabel={`${dateStr} 인증 내역`}
+            >
+              {circle}
+            </TouchableOpacity>
+          ) : canPressUnchecked ? (
+            <TouchableOpacity
+              onPress={() => onPressUncheckedInRangeDate?.(dateStr)}
+              accessibilityRole="button"
+              accessibilityLabel={`${dateStr} 인증하기`}
+            >
+              {circle}
+            </TouchableOpacity>
+          ) : (
+            circle
+          )}
         </View>
       );
     }
@@ -147,20 +212,22 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   dayCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 2,
   },
   dayText: {
     fontSize: 14,
     color: '#374151',
     fontWeight: '500',
   },
-  checkedDayText: {
-    color: '#FFFFFF',
+  dayNumWithCheck: {
+    fontSize: 12,
     fontWeight: '700',
+    lineHeight: 14,
   },
   todayCircle: {
     borderWidth: 2,

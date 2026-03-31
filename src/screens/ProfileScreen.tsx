@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,48 @@ import {
   SafeAreaView,
   ScrollView,
   Platform,
+  Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
+import { MainTabParamList, RootStackParamList } from '../types';
+import { challengeHasParticipant } from '../utils/challengeGuards';
+
+/** 프로필은 탭 + 상위 스택(상세·전체목록 등) 모두 사용 */
+type ProfileNav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Profile'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export default function ProfileScreen() {
   const { state, actions } = useAppContext();
+  const navigation = useNavigation<ProfileNav>();
   const [name, setName] = useState(state.currentUser?.name ?? '');
   const [isEditing, setIsEditing] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
-  // 통계
-  const myChallenges = state.challenges.filter((c) =>
-    state.currentUser ? c.participants.includes(state.currentUser.id) : false
+  useEffect(() => {
+    setName(state.currentUser?.name ?? '');
+  }, [state.currentUser?.id, state.currentUser?.name]);
+
+  const myChallenges = useMemo(
+    () =>
+      state.challenges.filter((c) =>
+        challengeHasParticipant(c, state.currentUser?.id)
+      ),
+    [state.challenges, state.currentUser?.id]
   );
-  const myCheckIns = state.checkIns.filter(
-    (ci) => ci.userId === state.currentUser?.id
+  const myCheckIns = useMemo(
+    () =>
+      state.checkIns.filter((ci) => ci.userId === state.currentUser?.id),
+    [state.checkIns, state.currentUser?.id]
   );
+
   const totalCheckIns = myCheckIns.length;
   const activeChallenges = myChallenges.filter((c) => {
     const now = new Date();
@@ -36,101 +63,131 @@ export default function ProfileScreen() {
     setIsEditing(false);
   };
 
+  const handlePickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('권한 필요', '갤러리 접근을 허용해 주세요.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    setPhotoBusy(true);
+    try {
+      await actions.updateUserPhoto(result.assets[0].uri);
+    } catch (e) {
+      const err = e as { message?: string };
+      Alert.alert('업로드 실패', err.message ?? '다시 시도해 주세요.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.headerTitle}>프로필</Text>
+        <View>
+          <Text style={styles.headerTitle}>프로필</Text>
 
-        {/* 프로필 카드 */}
-        <View style={styles.profileCard}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: state.currentUser?.avatarColor ?? '#9CA3AF' },
-            ]}
-          >
-            <Text style={styles.avatarText}>
-              {state.currentUser?.name?.[0] ?? '?'}
-            </Text>
-          </View>
-
-          {isEditing ? (
-            <View style={styles.editRow}>
-              <TextInput
-                style={styles.nameInput}
-                value={name}
-                onChangeText={setName}
-                autoFocus
-                maxLength={20}
-              />
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveName}>
-                <Text style={styles.saveBtnText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={() => setIsEditing(true)}>
-              <Text style={styles.userName}>{state.currentUser?.name ?? ''}</Text>
-              <Text style={styles.editHint}>탭하여 이름 변경</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* 통계 */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{myChallenges.length}</Text>
-            <Text style={styles.statLabel}>전체 챌린지</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{activeChallenges}</Text>
-            <Text style={styles.statLabel}>진행 중</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{totalCheckIns}</Text>
-            <Text style={styles.statLabel}>총 인증</Text>
-          </View>
-        </View>
-
-        {/* 최근 인증 기록 */}
-        <Text style={styles.sectionTitle}>최근 인증 기록</Text>
-        {myCheckIns.length === 0 ? (
-          <Text style={styles.emptyText}>아직 인증 기록이 없습니다.</Text>
-        ) : (
-          myCheckIns
-            .sort(
-              (a, b) =>
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            )
-            .slice(0, 10)
-            .map((ci) => {
-              const challenge = state.challenges.find(
-                (c) => c.id === ci.challengeId
-              );
-              return (
-                <View key={ci.id} style={styles.checkInItem}>
-                  <View style={styles.checkInDot} />
-                  <View style={styles.checkInInfo}>
-                    <Text style={styles.checkInChallenge}>
-                      {challenge?.title ?? '알 수 없는 챌린지'}
+          <View style={styles.profileCard}>
+            <TouchableOpacity
+              style={styles.avatarWrap}
+              onPress={handlePickPhoto}
+              disabled={photoBusy}
+              activeOpacity={0.85}
+            >
+              <View style={styles.avatarInner}>
+                {state.currentUser?.photoURL ? (
+                  <Image
+                    source={{ uri: state.currentUser.photoURL }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.avatar,
+                      { backgroundColor: state.currentUser?.avatarColor ?? '#9CA3AF' },
+                    ]}
+                  >
+                    <Text style={styles.avatarText}>
+                      {state.currentUser?.name?.[0] ?? '?'}
                     </Text>
-                    <Text style={styles.checkInDate}>{ci.date}</Text>
-                    {ci.type === 'text' && (
-                      <Text style={styles.checkInContent} numberOfLines={2}>
-                        {ci.content}
-                      </Text>
-                    )}
-                    {ci.type === 'photo' && (
-                      <Text style={styles.checkInContent}>📷 사진 인증</Text>
-                    )}
                   </View>
-                </View>
-              );
-            })
-        )}
-        {/* 로그아웃 */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={actions.signOut}>
-          <Text style={styles.logoutBtnText}>로그아웃</Text>
-        </TouchableOpacity>      </ScrollView>
+                )}
+                {photoBusy ? (
+                  <View style={styles.avatarBusy}>
+                    <ActivityIndicator color="#FFFFFF" />
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.photoHint}>프로필 사진 탭하여 변경</Text>
+
+            {isEditing ? (
+              <View style={styles.editRow}>
+                <TextInput
+                  style={styles.nameInput}
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                  maxLength={20}
+                />
+                <TouchableOpacity
+                  style={[styles.saveBtn, { marginLeft: 8 }]}
+                  onPress={handleSaveName}
+                >
+                  <Text style={styles.saveBtnText}>저장</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => setIsEditing(true)}>
+                <Text style={styles.userName}>{state.currentUser?.name ?? ''}</Text>
+                <Text style={styles.editHint}>탭하여 이름 변경</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.statsRow}>
+            <TouchableOpacity
+              style={styles.statBox}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('AllMyChallenges')}
+            >
+              <Text style={styles.statNumber}>{myChallenges.length}</Text>
+              <Text style={styles.statLabel}>전체 챌린지</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.statBox}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Home')}
+            >
+              <Text style={styles.statNumber}>{activeChallenges}</Text>
+              <Text style={styles.statLabel}>진행 중</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.statBox}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('MyCheckInHistory')}
+            >
+              <Text style={styles.statNumber}>{totalCheckIns}</Text>
+              <Text style={styles.statLabel}>총 인증</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={() => {
+              void actions.signOut();
+            }}
+          >
+            <Text style={styles.logoutBtnText}>로그아웃</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -157,12 +214,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  avatarWrap: {
+    marginBottom: 4,
+  },
+  avatarInner: {
+    width: 72,
+    height: 72,
+    position: 'relative',
+  },
   avatar: {
     width: 72,
     height: 72,
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#E5E7EB',
+  },
+  avatarBusy: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
     marginBottom: 12,
   },
   avatarText: {
@@ -185,7 +267,6 @@ const styles = StyleSheet.create({
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   nameInput: {
     backgroundColor: '#F3F4F6',
@@ -210,11 +291,12 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
     marginBottom: 24,
+    marginHorizontal: -6,
   },
   statBox: {
     flex: 1,
+    marginHorizontal: 6,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 16,
@@ -231,55 +313,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '500',
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 20,
-  },
-  checkInItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  checkInDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#4F46E5',
-    marginTop: 5,
-    marginRight: 12,
-  },
-  checkInInfo: {
-    flex: 1,
-  },
-  checkInChallenge: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  checkInDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 2,
-  },
-  checkInContent: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 4,
-    lineHeight: 18,
-  },
   logoutBtn: {
-    marginTop: 32,
+    marginTop: 8,
     backgroundColor: '#EF4444',
     borderRadius: 12,
     paddingVertical: 14,

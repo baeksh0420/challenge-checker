@@ -1,8 +1,14 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import {
+  getAuth,
+  initializeAuth,
+  type Auth,
+  type Persistence,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase 콘솔에서 프로젝트 설정 > 일반 > 내 앱 에서 값을 가져오세요
 // https://console.firebase.google.com/
@@ -18,14 +24,22 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-let auth;
+// React Native 번들에는 getReactNativePersistence가 있으나, firebase/auth 공개 typings에는 없습니다.
+// React Native에서는 Firebase가 권장하는 AsyncStorage persistence를 씁니다.
+let auth: Auth;
 if (Platform.OS === 'web') {
   auth = getAuth(app);
 } else {
-  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
+  const { getReactNativePersistence } = require('firebase/auth') as {
+    getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
+  };
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch {
+    auth = getAuth(app);
+  }
 }
 
 export { auth };
