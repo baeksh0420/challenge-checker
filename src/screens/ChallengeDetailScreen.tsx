@@ -10,9 +10,9 @@ import {
   Share,
   Modal,
   FlatList,
-  Image,
   Pressable,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
@@ -29,6 +29,11 @@ type Route = RouteProp<RootStackParamList, 'ChallengeDetail'>;
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 캘린더 탭: 참가자 전체 인증 일자 합산·날짜 탭 시 모달에서 모두 조회 */
+const CALENDAR_ALL_PARTICIPANTS = '__calendar_all__';
+
+const CALENDAR_ALL_ACCENT = '#000000';
+
 function parseCreatedAt(ci: CheckIn): number {
   const t = Date.parse(ci.createdAt);
   return Number.isFinite(t) ? t : 0;
@@ -41,38 +46,40 @@ export default function ChallengeDetailScreen() {
   const challengeId = route.params.challengeId;
   const challenge = state.challenges.find((c) => c.id === challengeId);
 
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(CALENDAR_ALL_PARTICIPANTS);
   const [detailDate, setDetailDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (!challenge) return;
-    const ids = participantIds(challenge);
-    const uid = state.currentUser?.id;
-    if (uid && ids.includes(uid)) {
-      setSelectedUserId(uid);
-    } else {
-      setSelectedUserId(ids[0] ?? '');
-    }
-  }, [challenge?.id, state.currentUser?.id]);
+    setSelectedUserId(CALENDAR_ALL_PARTICIPANTS);
+  }, [challenge?.id]);
 
-  const selectedUserCheckIns = useMemo(() => {
-    if (!challenge) return [];
-    return state.checkIns.filter(
-      (ci) => ci.challengeId === challenge.id && ci.userId === selectedUserId
+  const checkedDates = useMemo(() => {
+    if (!challenge) return new Set<string>();
+    if (selectedUserId === CALENDAR_ALL_PARTICIPANTS) {
+      const dates = new Set<string>();
+      for (const ci of state.checkIns) {
+        if (ci.challengeId === challenge.id) dates.add(ci.date);
+      }
+      return dates;
+    }
+    return new Set(
+      state.checkIns
+        .filter((ci) => ci.challengeId === challenge.id && ci.userId === selectedUserId)
+        .map((ci) => ci.date)
     );
   }, [challenge, state.checkIns, selectedUserId]);
 
-  const checkedDates = useMemo(
-    () => new Set(selectedUserCheckIns.map((ci) => ci.date)),
-    [selectedUserCheckIns]
-  );
-
   const dayDetailCheckIns = useMemo(() => {
     if (!challenge || !detailDate) return [];
-    return state.checkIns
-      .filter((ci) => ci.challengeId === challenge.id && ci.date === detailDate)
-      .sort((a, b) => parseCreatedAt(b) - parseCreatedAt(a));
-  }, [detailDate, state.checkIns, challenge]);
+    let list = state.checkIns.filter(
+      (ci) => ci.challengeId === challenge.id && ci.date === detailDate
+    );
+    if (selectedUserId !== CALENDAR_ALL_PARTICIPANTS) {
+      list = list.filter((ci) => ci.userId === selectedUserId);
+    }
+    return list.sort((a, b) => parseCreatedAt(b) - parseCreatedAt(a));
+  }, [detailDate, state.checkIns, challenge, selectedUserId]);
 
   const now = new Date();
   const todayStr = formatLocalDate(now);
@@ -114,6 +121,13 @@ export default function ChallengeDetailScreen() {
 
   const isCreator = state.currentUser?.id === challenge.creatorId;
 
+  const hasCheckedInToday = state.checkIns.some(
+    (ci) =>
+      ci.challengeId === challenge.id &&
+      ci.userId === state.currentUser?.id &&
+      ci.date === todayStr
+  );
+
   const handleDelete = () => {
     const id = challenge.id;
     Alert.alert(
@@ -152,10 +166,15 @@ export default function ChallengeDetailScreen() {
 
   const getUser = (userId: string) => state.users.find((u) => u.id === userId);
 
-  const accent = getParticipantAccent(state.users, selectedUserId);
+  const accent =
+    selectedUserId === CALENDAR_ALL_PARTICIPANTS
+      ? CALENDAR_ALL_ACCENT
+      : getParticipantAccent(state.users, selectedUserId);
 
   const isSelfCalendar =
-    !!state.currentUser?.id && selectedUserId === state.currentUser.id;
+    !!state.currentUser?.id &&
+    selectedUserId === state.currentUser.id &&
+    selectedUserId !== CALENDAR_ALL_PARTICIPANTS;
   /** 내 캘린더에서 기간 내 지난 날·오늘 보충 인증 (종료된 챌린지 포함) */
   const canSupplementCheckIn = isParticipant && isSelfCalendar;
 
@@ -236,6 +255,24 @@ export default function ChallengeDetailScreen() {
 
         <Text style={styles.sectionTitle}>캘린더</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow}>
+          <TouchableOpacity
+            style={[
+              styles.userTab,
+              selectedUserId === CALENDAR_ALL_PARTICIPANTS && {
+                backgroundColor: CALENDAR_ALL_ACCENT,
+              },
+            ]}
+            onPress={() => setSelectedUserId(CALENDAR_ALL_PARTICIPANTS)}
+          >
+            <Text
+              style={[
+                styles.userTabText,
+                selectedUserId === CALENDAR_ALL_PARTICIPANTS && { color: '#FFFFFF' },
+              ]}
+            >
+              전체
+            </Text>
+          </TouchableOpacity>
           {participants.map((uid) => {
             const user = getUser(uid);
             const isSelected = uid === selectedUserId;
@@ -266,21 +303,23 @@ export default function ChallengeDetailScreen() {
           accentColor={accent}
           onPressCheckedDate={(dateStr) => setDetailDate(dateStr)}
           onPressUncheckedInRangeDate={
-            canSupplementCheckIn
-              ? (dateStr) => {
-                  if (dateStr > todayStr) {
-                    Alert.alert('알림', '오늘 이후 날짜에는 인증할 수 없습니다.');
-                    return;
+            selectedUserId === CALENDAR_ALL_PARTICIPANTS
+              ? (dateStr) => setDetailDate(dateStr)
+              : canSupplementCheckIn
+                ? (dateStr) => {
+                    if (dateStr > todayStr) {
+                      Alert.alert('알림', '오늘 이후 날짜에는 인증할 수 없습니다.');
+                      return;
+                    }
+                    if (dateStr < challenge.startDate || dateStr > challenge.endDate) {
+                      return;
+                    }
+                    navigation.navigate('CheckIn', {
+                      challengeId: challenge.id,
+                      date: dateStr,
+                    });
                   }
-                  if (dateStr < challenge.startDate || dateStr > challenge.endDate) {
-                    return;
-                  }
-                  navigation.navigate('CheckIn', {
-                    challengeId: challenge.id,
-                    date: dateStr,
-                  });
-                }
-              : undefined
+                : (dateStr) => setDetailDate(dateStr)
           }
         />
 
@@ -294,14 +333,24 @@ export default function ChallengeDetailScreen() {
           ) : null}
           {isParticipant && isActive ? (
             <TouchableOpacity
-              style={styles.checkInBtn}
+              style={[
+                styles.checkInBtn,
+                hasCheckedInToday && styles.checkInBtnMuted,
+              ]}
               onPress={() =>
                 navigation.navigate('CheckIn', {
                   challengeId: challenge.id,
                 })
               }
             >
-              <Text style={styles.checkInBtnText}>오늘 인증하기</Text>
+              <Text
+                style={[
+                  styles.checkInBtnText,
+                  hasCheckedInToday && styles.checkInBtnTextMuted,
+                ]}
+              >
+                {hasCheckedInToday ? '인증 수정하기' : '오늘 인증하기'}
+              </Text>
             </TouchableOpacity>
           ) : null}
           {isCreator ? (
@@ -347,17 +396,58 @@ export default function ChallengeDetailScreen() {
                 style={styles.modalList}
                 renderItem={({ item: ci }) => {
                   const author = getUser(ci.userId);
+                  const isMine = ci.userId === state.currentUser?.id;
                   return (
                     <View style={styles.feedItem}>
-                      <Text style={styles.feedAuthor}>{author?.name ?? '알 수 없음'}</Text>
-                      <Text style={styles.feedMeta}>{ci.date}</Text>
+                      <View style={styles.feedItemHeader}>
+                        <View style={styles.feedItemHeaderText}>
+                          <Text style={styles.feedAuthor}>
+                            {author?.name ?? '알 수 없음'}
+                          </Text>
+                          <Text style={styles.feedMeta}>{ci.date}</Text>
+                        </View>
+                        {isMine ? (
+                          <View style={styles.feedItemActions}>
+                            <TouchableOpacity
+                              hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                              onPress={() => {
+                                setDetailDate(null);
+                                navigation.navigate('CheckIn', {
+                                  challengeId: challenge.id,
+                                  date: ci.date,
+                                });
+                              }}
+                            >
+                              <Text style={styles.feedEditLabel}>수정</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+                              onPress={() =>
+                                Alert.alert('인증 삭제', '이 인증을 삭제할까요?', [
+                                  { text: '취소', style: 'cancel' },
+                                  {
+                                    text: '삭제',
+                                    style: 'destructive',
+                                    onPress: () => void actions.deleteCheckIn(ci),
+                                  },
+                                ])
+                              }
+                            >
+                              <Text style={styles.feedDeleteLabel}>삭제</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                      </View>
                       {ci.type === 'text' ? (
                         <Text style={styles.feedText}>{String(ci.content ?? '')}</Text>
                       ) : (
                         <Image
                           source={{ uri: ci.content }}
                           style={styles.feedImage}
-                          resizeMode="cover"
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          recyclingKey={ci.id}
+                          transition={150}
                         />
                       )}
                     </View>
@@ -378,8 +468,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   content: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 56,
   },
   endedResultBox: {
     backgroundColor: '#FFFBEB',
@@ -516,10 +607,18 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  checkInBtnMuted: {
+    backgroundColor: '#E5E7EB',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
   checkInBtnText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  checkInBtnTextMuted: {
+    color: '#6B7280',
   },
   editBtn: {
     backgroundColor: '#FFFFFF',
@@ -605,6 +704,31 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+  },
+  feedItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  feedItemHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  feedItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  feedEditLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  feedDeleteLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EF4444',
   },
   feedAuthor: {
     fontSize: 15,

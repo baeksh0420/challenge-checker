@@ -20,11 +20,13 @@ import {
   uploadCheckInImage,
   getUser as fbGetUser,
   deleteChallenge as fbDeleteChallenge,
+  deleteCheckIn as fbDeleteCheckIn,
   findChallengeByInviteCode,
   updateUserProfile as fbUpdateUserProfile,
   uploadUserAvatar,
 } from '../firebase/firestore';
 import { auth } from '../firebase/config';
+import { compressAvatarPhoto, compressCheckInPhoto } from '../utils/compressImage';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -99,6 +101,7 @@ interface AppContextType {
     updateUserName: (name: string) => Promise<void>;
     updateUserPhoto: (localImageUri: string) => Promise<void>;
     deleteChallenge: (challengeId: string) => Promise<void>;
+    deleteCheckIn: (checkIn: CheckIn) => Promise<void>;
     joinByCode: (code: string) => Promise<{ success: boolean; message: string }>;
   };
 }
@@ -203,11 +206,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     addCheckIn: async (checkIn: CheckIn, localImageUri?: string) => {
       if (checkIn.type === 'photo' && localImageUri) {
+        let uploadUri = localImageUri;
+        try {
+          uploadUri = await compressCheckInPhoto(localImageUri);
+        } catch {
+          /* 압축 실패 시(웹 등) 원본 업로드 */
+        }
         const downloadUrl = await uploadCheckInImage(
           checkIn.challengeId,
           checkIn.userId,
           checkIn.date,
-          localImageUri
+          uploadUri
         );
         checkIn = { ...checkIn, content: downloadUrl };
       }
@@ -225,7 +234,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const u = state.currentUser;
       const fu = auth.currentUser;
       if (!u || !fu) return;
-      const url = await uploadUserAvatar(u.id, localImageUri);
+      let uploadUri = localImageUri;
+      try {
+        uploadUri = await compressAvatarPhoto(localImageUri);
+      } catch {
+        /* 압축 실패 시 원본 */
+      }
+      const url = await uploadUserAvatar(u.id, uploadUri);
       await fbUpdateUserProfile(u.id, { photoURL: url });
       await updateProfile(fu, { photoURL: url });
       dispatch({
@@ -235,6 +250,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     deleteChallenge: async (challengeId: string) => {
       await fbDeleteChallenge(challengeId);
+    },
+    deleteCheckIn: async (checkIn: CheckIn) => {
+      const u = state.currentUser;
+      if (!u || checkIn.userId !== u.id) return;
+      await fbDeleteCheckIn(checkIn);
     },
     joinByCode: async (code: string): Promise<{ success: boolean; message: string }> => {
       if (!state.currentUser) return { success: false, message: '로그인이 필요합니다.' };

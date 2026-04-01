@@ -32,9 +32,9 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#F3F4F6',
-          paddingBottom: 6,
-          paddingTop: 6,
-          height: 60,
+          paddingBottom: 12,
+          paddingTop: 10,
+          height: 68,
         },
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
@@ -130,7 +130,7 @@ export default function AppNavigator() {
           <Stack.Screen
             name="MyCheckInHistory"
             component={MyCheckInHistoryScreen}
-            options={{ title: '인증 기록' }}
+            options={{ title: '내 인증내역' }}
           />
         </Stack.Navigator>
       ) : (

@@ -1,12 +1,6 @@
 import React, { useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  SafeAreaView,
-  Image,
-} from 'react-native';
+import { View, Text, FlatList, StyleSheet, SafeAreaView } from 'react-native';
+import { Image } from 'expo-image';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList } from '../types';
@@ -44,6 +38,10 @@ export default function ChallengeBoardScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews
         ListEmptyComponent={
           <Text style={styles.empty}>아직 인증 글이 없습니다.</Text>
         }
@@ -63,7 +61,10 @@ export default function ChallengeBoardScreen() {
                 <Image
                   source={{ uri: ci.content }}
                   style={styles.photo}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  recyclingKey={ci.id}
+                  transition={150}
                 />
               )}
             </View>
@@ -81,8 +82,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 20,
@@ -96,7 +97,8 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
+    paddingTop: 8,
+    paddingBottom: 44,
   },
   empty: {
     textAlign: 'center',

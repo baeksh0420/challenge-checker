@@ -196,8 +196,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 32,
-    paddingTop: 24,
-    paddingBottom: 48,
+    paddingTop: 36,
+    paddingBottom: 64,
   },
   emoji: {
     fontSize: 64,

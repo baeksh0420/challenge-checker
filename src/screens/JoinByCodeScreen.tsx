@@ -92,7 +92,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 72,
+    paddingBottom: 32,
     alignItems: 'center',
   },
   title: {

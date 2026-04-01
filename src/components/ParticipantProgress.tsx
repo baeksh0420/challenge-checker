@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { Image } from 'expo-image';
 import { useAppContext } from '../store/AppContext';
 import { Challenge, User } from '../types';
 import { calculateFine } from '../utils/fineCalculator';
@@ -41,7 +42,14 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
     return (
       <View style={styles.participantRow}>
         {user.photoURL ? (
-          <Image source={{ uri: user.photoURL }} style={styles.avatarImg} />
+          <Image
+            source={{ uri: user.photoURL }}
+            style={styles.avatarImg}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={user.id}
+            transition={100}
+          />
         ) : (
           <View style={[styles.avatar, { backgroundColor: user.avatarColor }]}>
             <Text style={styles.avatarText}>{user.name[0]}</Text>

@@ -7,10 +7,12 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  Image,
   Alert,
   Platform,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppContext } from '../store/AppContext';
@@ -27,15 +29,10 @@ export default function CheckInScreen() {
   const [type, setType] = useState<'text' | 'photo'>('text');
   const [textContent, setTextContent] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const checkInDate = route.params.date ?? formatDate(new Date());
   const isPastOrToday = checkInDate <= formatDate(new Date());
-
-  useEffect(() => {
-    setType('text');
-    setTextContent('');
-    setImageUri(null);
-  }, [checkInDate, route.params.challengeId]);
 
   const existingCheckIn = useMemo(
     () =>
@@ -48,6 +45,32 @@ export default function CheckInScreen() {
     [state.checkIns, route.params.challengeId, state.currentUser?.id, checkInDate]
   );
 
+  useEffect(() => {
+    const ex = state.checkIns.find(
+      (ci) =>
+        ci.challengeId === route.params.challengeId &&
+        ci.userId === state.currentUser?.id &&
+        ci.date === checkInDate
+    );
+    if (ex) {
+      setType(ex.type);
+      if (ex.type === 'text') {
+        setTextContent(String(ex.content ?? ''));
+        setImageUri(null);
+      } else {
+        setTextContent('');
+        const url = String(ex.content ?? '');
+        setImageUri(url.length > 0 ? url : null);
+      }
+    } else {
+      setType('text');
+      setTextContent('');
+      setImageUri(null);
+    }
+    // 챌린지·인증일이 바뀔 때만 초기화 (전역 checkIns 스냅샷 변경 시 입력 유지)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- state.checkIns는 effect 내부에서만 최신 값으로 읽음
+  }, [checkInDate, route.params.challengeId, state.currentUser?.id]);
+
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
@@ -59,7 +82,9 @@ export default function CheckInScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.7,
+      quality: 0.55,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -77,7 +102,7 @@ export default function CheckInScreen() {
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.7,
+      quality: 0.55,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -101,27 +126,59 @@ export default function CheckInScreen() {
 
     if (!state.currentUser) return;
 
-    const localUri = type === 'photo' ? imageUri! : undefined;
+    let localUri: string | undefined;
+    let content = type === 'text' ? textContent.trim() : '';
+    if (type === 'photo' && imageUri) {
+      const isRemote = /^https?:\/\//i.test(imageUri);
+      if (isRemote) {
+        content = imageUri;
+        localUri = undefined;
+      } else {
+        localUri = imageUri;
+        content = '';
+      }
+    }
+
     const checkIn: CheckIn = {
       id: `checkin-${Date.now()}`,
       challengeId: route.params.challengeId,
       userId: state.currentUser.id,
       date: checkInDate,
       type,
-      content: type === 'text' ? textContent.trim() : '',
+      content,
       createdAt: new Date().toISOString(),
     };
 
-    await actions.addCheckIn(checkIn, localUri);
-    const doneMsg =
-      checkInDate === formatDate(new Date())
-        ? '오늘의 인증이 등록되었습니다!'
-        : `${checkInDate} 인증이 등록되었습니다!`;
-    Alert.alert('완료', doneMsg, [{ text: '확인', onPress: () => navigation.goBack() }]);
+    setSubmitting(true);
+    try {
+      await actions.addCheckIn(checkIn, localUri);
+      const isEdit = !!existingCheckIn;
+      const doneMsg = isEdit
+        ? '인증이 수정되었습니다.'
+        : checkInDate === formatDate(new Date())
+          ? '오늘의 인증이 등록되었습니다!'
+          : `${checkInDate} 인증이 등록되었습니다!`;
+      Alert.alert('완료', doneMsg, [{ text: '확인', onPress: () => navigation.goBack() }]);
+    } catch {
+      Alert.alert('오류', '인증 등록에 실패했습니다. 네트워크를 확인 후 다시 시도해 주세요.');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const loadingMessage =
+    type === 'photo' ? '사진을 업로드하는 중…' : '인증을 등록하는 중…';
 
   return (
     <SafeAreaView style={styles.container}>
+      <Modal visible={submitting} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.loadingBackdrop}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#4F46E5" />
+            <Text style={styles.loadingText}>{loadingMessage}</Text>
+          </View>
+        </View>
+      </Modal>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.screenTitle}>챌린지 인증</Text>
         <Text style={styles.dateText}>인증일: {checkInDate}</Text>
@@ -139,6 +196,7 @@ export default function CheckInScreen() {
           <TouchableOpacity
             style={[styles.typeBtn, type === 'text' && styles.typeBtnActive]}
             onPress={() => setType('text')}
+            disabled={submitting}
           >
             <Text
               style={[
@@ -152,6 +210,7 @@ export default function CheckInScreen() {
           <TouchableOpacity
             style={[styles.typeBtn, type === 'photo' && styles.typeBtnActive]}
             onPress={() => setType('photo')}
+            disabled={submitting}
           >
             <Text
               style={[
@@ -173,6 +232,7 @@ export default function CheckInScreen() {
               onChangeText={setTextContent}
               multiline
               maxLength={500}
+              editable={!submitting}
             />
             <Text style={styles.charCount}>{textContent.length}/500</Text>
           </View>
@@ -180,21 +240,27 @@ export default function CheckInScreen() {
           <View style={styles.photoSection}>
             {imageUri ? (
               <View style={styles.imagePreviewContainer}>
-                <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.imagePreview}
+                  contentFit="cover"
+                  cachePolicy="none"
+                />
                 <TouchableOpacity
                   style={styles.removeImageBtn}
                   onPress={() => setImageUri(null)}
+                  disabled={submitting}
                 >
                   <Text style={styles.removeImageText}>✕</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.photoButtons}>
-                <TouchableOpacity style={styles.photoBtn} onPress={takePhoto}>
+                <TouchableOpacity style={styles.photoBtn} onPress={takePhoto} disabled={submitting}>
                   <Text style={styles.photoBtnIcon}>📷</Text>
                   <Text style={styles.photoBtnText}>카메라</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.photoBtn} onPress={pickImage}>
+                <TouchableOpacity style={styles.photoBtn} onPress={pickImage} disabled={submitting}>
                   <Text style={styles.photoBtnIcon}>🖼️</Text>
                   <Text style={styles.photoBtnText}>앨범</Text>
                 </TouchableOpacity>
@@ -203,13 +269,18 @@ export default function CheckInScreen() {
           </View>
         )}
 
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
+        <TouchableOpacity
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
           <Text style={styles.submitBtnText}>인증 완료</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.cancelBtn}
           onPress={() => navigation.goBack()}
+          disabled={submitting}
         >
           <Text style={styles.cancelBtnText}>취소</Text>
         </TouchableOpacity>
@@ -224,8 +295,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   content: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 56,
   },
   screenTitle: {
     fontSize: 24,
@@ -351,6 +423,31 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
+  },
+  submitBtnDisabled: {
+    opacity: 0.65,
+  },
+  loadingBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
   },
   submitBtnText: {
     color: '#FFFFFF',

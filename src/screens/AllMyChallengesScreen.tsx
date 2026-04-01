@@ -94,8 +94,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   list: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 56,
   },
   empty: {
     textAlign: 'center',

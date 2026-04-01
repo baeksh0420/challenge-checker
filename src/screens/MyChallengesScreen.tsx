@@ -138,8 +138,8 @@ const styles = StyleSheet.create({
   },
   headerBar: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingTop: 22,
+    paddingBottom: 12,
   },
   headerTitle: {
     fontSize: 28,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 56,
   },
   emptyContainer: {
     alignItems: 'center',

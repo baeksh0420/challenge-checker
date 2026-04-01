@@ -8,10 +8,11 @@ import {
   SafeAreaView,
   ScrollView,
   Platform,
-  Image,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -73,7 +74,7 @@ export default function ProfileScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.85,
+      quality: 0.7,
     });
     if (result.canceled || !result.assets[0]?.uri) return;
     setPhotoBusy(true);
@@ -89,6 +90,16 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Modal visible={photoBusy} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.loadingBackdrop}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#4F46E5" />
+            <Text style={styles.loadingText}>
+              사진을 최적화하고 업로드하는 중…
+            </Text>
+          </View>
+        </View>
+      </Modal>
       <ScrollView contentContainerStyle={styles.content}>
         <View>
           <Text style={styles.headerTitle}>프로필</Text>
@@ -105,6 +116,10 @@ export default function ProfileScreen() {
                   <Image
                     source={{ uri: state.currentUser.photoURL }}
                     style={styles.avatarImage}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={state.currentUser.id}
+                    transition={120}
                   />
                 ) : (
                   <View
@@ -174,7 +189,7 @@ export default function ProfileScreen() {
               onPress={() => navigation.navigate('MyCheckInHistory')}
             >
               <Text style={styles.statNumber}>{totalCheckIns}</Text>
-              <Text style={styles.statLabel}>총 인증</Text>
+              <Text style={styles.statLabel}>내 인증내역</Text>
             </TouchableOpacity>
           </View>
 
@@ -198,8 +213,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   content: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 56,
   },
   headerTitle: {
     fontSize: 28,
@@ -241,6 +257,28 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
   },
   photoHint: {
     fontSize: 12,

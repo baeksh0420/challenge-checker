@@ -71,8 +71,8 @@ const styles = StyleSheet.create({
   },
   headerBar: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 22,
+    paddingBottom: 16,
   },
   headerTitle: {
     fontSize: 28,
@@ -86,7 +86,8 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingTop: 8,
+    paddingBottom: 56,
   },
   row: {
     flexDirection: 'row',

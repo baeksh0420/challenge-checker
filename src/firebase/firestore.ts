@@ -14,7 +14,7 @@ import {
   setDoc,
   deleteDoc,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './config';
 import { Challenge, CheckIn, User } from '../types';
 
@@ -63,7 +63,7 @@ export async function uploadUserAvatar(userId: string, uri: string): Promise<str
   const response = await fetch(uri);
   const blob = await response.blob();
   const imageRef = ref(storage, `avatars/${userId}.jpg`);
-  await uploadBytes(imageRef, blob);
+  await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(imageRef);
 }
 
@@ -166,6 +166,23 @@ export async function addCheckIn(checkIn: CheckIn): Promise<void> {
   });
 }
 
+export async function deleteCheckIn(
+  checkIn: Pick<CheckIn, 'id' | 'challengeId' | 'userId' | 'date' | 'type'>
+): Promise<void> {
+  if (checkIn.type === 'photo') {
+    try {
+      const imageRef = ref(
+        storage,
+        `checkIns/${checkIn.challengeId}/${checkIn.userId}/${checkIn.date}.jpg`
+      );
+      await deleteObject(imageRef);
+    } catch {
+      /* 파일 없음 등 무시 */
+    }
+  }
+  await deleteDoc(doc(db, CHECKINS, checkIn.id));
+}
+
 export function subscribeCheckIns(
   callback: (checkIns: CheckIn[]) => void
 ): Unsubscribe {
@@ -224,6 +241,6 @@ export async function uploadCheckInImage(
   const response = await fetch(uri);
   const blob = await response.blob();
   const imageRef = ref(storage, `checkIns/${challengeId}/${userId}/${date}.jpg`);
-  await uploadBytes(imageRef, blob);
+  await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(imageRef);
 }

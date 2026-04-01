@@ -5,10 +5,16 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
-  Image,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
-import { CheckIn } from '../types';
+import { CheckIn, RootStackParamList } from '../types';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function parseCreated(ci: CheckIn): number {
   const t = Date.parse(ci.createdAt);
@@ -16,7 +22,8 @@ function parseCreated(ci: CheckIn): number {
 }
 
 export default function MyCheckInHistoryScreen() {
-  const { state } = useAppContext();
+  const { state, actions } = useAppContext();
+  const navigation = useNavigation<Nav>();
   const uid = state.currentUser?.id;
 
   const items = useMemo(() => {
@@ -39,11 +46,43 @@ export default function MyCheckInHistoryScreen() {
                 key={ci.id || `${ci.challengeId}-${ci.date}-${ci.userId}`}
                 style={styles.card}
               >
-                <View style={styles.cardHead}>
-                  <Text style={styles.chName}>
-                    {challenge?.title ?? '알 수 없는 챌린지'}
-                  </Text>
-                  <Text style={styles.date}>{ci.date}</Text>
+                <View style={styles.cardHeadRow}>
+                  <View style={styles.cardHeadMain}>
+                    <Text style={styles.chName}>
+                      {challenge?.title ?? '알 수 없는 챌린지'}
+                    </Text>
+                    <Text style={styles.date}>{ci.date}</Text>
+                  </View>
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={styles.actionHit}
+                      onPress={() =>
+                        navigation.navigate('CheckIn', {
+                          challengeId: ci.challengeId,
+                          date: ci.date,
+                        })
+                      }
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.editLabel}>수정</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionHit}
+                      onPress={() =>
+                        Alert.alert('인증 삭제', '이 인증을 삭제할까요?', [
+                          { text: '취소', style: 'cancel' },
+                          {
+                            text: '삭제',
+                            style: 'destructive',
+                            onPress: () => void actions.deleteCheckIn(ci),
+                          },
+                        ])
+                      }
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.deleteLabel}>삭제</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 {ci.type === 'text' ? (
                   <Text style={styles.body}>{String(ci.content ?? '')}</Text>
@@ -52,7 +91,10 @@ export default function MyCheckInHistoryScreen() {
                     <Image
                       source={{ uri: ci.content }}
                       style={styles.photo}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      recyclingKey={ci.id}
+                      transition={150}
                     />
                   </>
                 )}
@@ -71,8 +113,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   content: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 56,
   },
   empty: {
     fontSize: 15,
@@ -88,8 +131,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
   },
-  cardHead: {
+  cardHeadRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 8,
+    gap: 8,
+  },
+  cardHeadMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionHit: {
+    paddingVertical: 2,
+  },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  deleteLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EF4444',
   },
   chName: {
     fontSize: 15,

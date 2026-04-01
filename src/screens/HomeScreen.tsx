@@ -107,8 +107,8 @@ const styles = StyleSheet.create({
   },
   headerBar: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 22,
+    paddingBottom: 16,
   },
   headerTitle: {
     fontSize: 28,
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: 112,
   },
   sectionHeader: {
     paddingHorizontal: 20,
