@@ -2,6 +2,11 @@
 
 다수의 사용자가 공동 목표를 가지고 챌린지를 진행하도록 도와주는 앱입니다.
 
+<img width="264" height="548" alt="스크린샷 2026-04-01 오후 4 20 18" src="https://github.com/user-attachments/assets/4db200dd-8b48-4e54-b80f-801a06287600" />
+<img width="265" height="551" alt="스크린샷 2026-04-01 오후 4 21 00" src="https://github.com/user-attachments/assets/8bc5733c-631d-4958-abcc-05de4805eff3" />
+<img width="267" height="553" alt="스크린샷 2026-04-01 오후 4 21 38" src="https://github.com/user-attachments/assets/a5716be8-55f0-4343-aef4-8eeb59883335" />
+
+
 ## 테스터 다운로드
 - IOS 다운 : https://testflight.apple.com/join/U7uCsc83
 - AOS 다운 : https://expo.dev/accounts/sohyeon-baek/projects/challenge-checker/builds/c13ed817-8b7f-492d-9590-4f420f4e5a9a
