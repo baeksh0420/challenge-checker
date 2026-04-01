@@ -2,6 +2,10 @@
 
 다수의 사용자가 공동 목표를 가지고 챌린지를 진행하도록 도와주는 앱입니다.
 
+## 테스터 다운로드
+- IOS 다운 : https://testflight.apple.com/join/U7uCsc83
+- AOS 다운 : https://expo.dev/accounts/sohyeon-baek/projects/challenge-checker/builds/c13ed817-8b7f-492d-9590-4f420f4e5a9a
+
 ## 기술 스택
 
 - **React Native** + **Expo** (iOS / Android 크로스 플랫폼)
