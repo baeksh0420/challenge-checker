@@ -24,6 +24,8 @@ import {
   findChallengeByInviteCode,
   updateUserProfile as fbUpdateUserProfile,
   uploadUserAvatar,
+  toggleCheckInReaction as fbToggleCheckInReaction,
+  updateParticipantColor as fbUpdateParticipantColor,
 } from '../firebase/firestore';
 import { auth } from '../firebase/config';
 import { compressAvatarPhoto, compressCheckInPhoto } from '../utils/compressImage';
@@ -102,7 +104,9 @@ interface AppContextType {
     updateUserPhoto: (localImageUri: string) => Promise<void>;
     deleteChallenge: (challengeId: string) => Promise<void>;
     deleteCheckIn: (checkIn: CheckIn) => Promise<void>;
-    joinByCode: (code: string) => Promise<{ success: boolean; message: string }>;
+    joinByCode: (code: string) => Promise<{ success: boolean; message: string; challengeId?: string }>;
+    toggleCheckInReaction: (checkInId: string, type: 'thumbsUp' | 'sad', hasReacted: boolean) => Promise<void>;
+    updateParticipantColor: (challengeId: string, color: string) => Promise<void>;
   };
 }
 
@@ -256,7 +260,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!u || checkIn.userId !== u.id) return;
       await fbDeleteCheckIn(checkIn);
     },
-    joinByCode: async (code: string): Promise<{ success: boolean; message: string }> => {
+    joinByCode: async (code: string): Promise<{ success: boolean; message: string; challengeId?: string }> => {
       if (!state.currentUser) return { success: false, message: '로그인이 필요합니다.' };
       const challenge = await findChallengeByInviteCode(code);
       if (!challenge) return { success: false, message: '존재하지 않는 초대 코드입니다.' };
@@ -264,7 +268,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, message: '이미 참여 중인 챌린지입니다.' };
       }
       await fbJoinChallenge(challenge.id, state.currentUser.id);
-      return { success: true, message: `"${challenge.title}" 챌린지에 참여했습니다!` };
+      return { success: true, message: `"${challenge.title}" 챌린지에 참여했습니다!`, challengeId: challenge.id };
+    },
+    toggleCheckInReaction: async (checkInId: string, type: 'thumbsUp' | 'sad', hasReacted: boolean) => {
+      if (!state.currentUser) return;
+      await fbToggleCheckInReaction(checkInId, type, state.currentUser.id, hasReacted);
+    },
+    updateParticipantColor: async (challengeId: string, color: string) => {
+      if (!state.currentUser) return;
+      await fbUpdateParticipantColor(challengeId, state.currentUser.id, color);
     },
   };
 

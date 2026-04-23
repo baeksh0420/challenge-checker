@@ -22,11 +22,12 @@ function parseCreatedAt(ci: CheckIn): number {
 
 export default function ChallengeBoardScreen() {
   const route = useRoute<Route>();
-  const { state } = useAppContext();
+  const { state, actions } = useAppContext();
   const challengeId = route.params.challengeId;
   const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
 
   const challenge = state.challenges.find((c) => c.id === challengeId);
+  const myId = state.currentUser?.id;
 
   const items = useMemo(() => {
     return state.checkIns
@@ -35,6 +36,13 @@ export default function ChallengeBoardScreen() {
   }, [state.checkIns, challengeId]);
 
   const getUser = (userId: string) => state.users.find((u) => u.id === userId);
+
+  const handleReaction = (ci: CheckIn, type: 'thumbsUp' | 'sad') => {
+    if (!myId || ci.userId === myId) return;
+    const list = ci.reactions?.[type] ?? [];
+    const hasReacted = list.includes(myId);
+    void actions.toggleCheckInReaction(ci.id, type, hasReacted);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,6 +64,12 @@ export default function ChallengeBoardScreen() {
         }
         renderItem={({ item: ci }) => {
           const author = getUser(ci.userId);
+          const isOwn = ci.userId === myId;
+          const thumbsUpList = ci.reactions?.thumbsUp ?? [];
+          const sadList = ci.reactions?.sad ?? [];
+          const myThumbsUp = myId ? thumbsUpList.includes(myId) : false;
+          const mySad = myId ? sadList.includes(myId) : false;
+
           return (
             <View style={styles.card}>
               <View style={styles.cardHead}>
@@ -92,6 +106,44 @@ export default function ChallengeBoardScreen() {
                   ) : null}
                 </>
               )}
+
+              <View style={styles.reactionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.reactionBtn,
+                    myThumbsUp && styles.reactionBtnActive,
+                    isOwn && styles.reactionBtnDisabled,
+                  ]}
+                  onPress={() => handleReaction(ci, 'thumbsUp')}
+                  disabled={isOwn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.reactionEmoji}>👍</Text>
+                  {thumbsUpList.length > 0 ? (
+                    <Text style={[styles.reactionCount, myThumbsUp && styles.reactionCountActive]}>
+                      {thumbsUpList.length}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.reactionBtn,
+                    mySad && styles.reactionBtnActive,
+                    isOwn && styles.reactionBtnDisabled,
+                  ]}
+                  onPress={() => handleReaction(ci, 'sad')}
+                  disabled={isOwn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.reactionEmoji}>😢</Text>
+                  {sadList.length > 0 ? (
+                    <Text style={[styles.reactionCount, mySad && styles.reactionCountActive]}>
+                      {sadList.length}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              </View>
             </View>
           );
         }}
@@ -170,5 +222,38 @@ const styles = StyleSheet.create({
   },
   photoNote: {
     marginTop: 10,
+  },
+  reactionRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  reactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    gap: 4,
+  },
+  reactionBtnActive: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  reactionBtnDisabled: {
+    opacity: 0.4,
+  },
+  reactionEmoji: {
+    fontSize: 16,
+  },
+  reactionCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  reactionCountActive: {
+    color: '#4F46E5',
   },
 });

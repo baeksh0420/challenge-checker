@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList, Challenge } from '../types';
 import { formatDate } from '../utils/fineCalculator';
+import DatePickerModal from '../components/DatePickerModal';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type CreateRoute = RouteProp<RootStackParamList, 'CreateChallenge'>;
@@ -44,20 +45,23 @@ export default function CreateChallengeScreen() {
   const today = new Date();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [startDateStr, setStartDateStr] = useState(formatDate(today));
-  const [endDateStr, setEndDateStr] = useState(formatDate(defaultEndDate(today)));
+  const [startDate, setStartDate] = useState<Date>(today);
+  const [endDate, setEndDate] = useState<Date>(defaultEndDate(today));
   const [requiredDays, setRequiredDays] = useState('5');
   const [fineMode, setFineMode] = useState<'weekly' | 'daily'>('weekly');
   const [weeklyFineRule, setWeeklyFineRule] = useState<'flat' | 'perShortfall'>('flat');
   const [excludedDays, setExcludedDays] = useState<number[]>([]);
   const [fineAmount, setFineAmount] = useState('10000');
+  const [datePickerTarget, setDatePickerTarget] = useState<'start' | 'end' | null>(null);
 
   useEffect(() => {
     if (!editingChallenge) return;
     setTitle(editingChallenge.title);
     setDescription(editingChallenge.description ?? '');
-    setStartDateStr(editingChallenge.startDate);
-    setEndDateStr(editingChallenge.endDate);
+    const sd = parseYmd(editingChallenge.startDate);
+    const ed = parseYmd(editingChallenge.endDate);
+    if (sd) setStartDate(sd);
+    if (ed) setEndDate(ed);
     setRequiredDays(String(editingChallenge.requiredDaysPerWeek));
     setFineMode(editingChallenge.fineMode ?? 'weekly');
     setWeeklyFineRule(editingChallenge.weeklyFineRule ?? 'flat');
@@ -77,14 +81,8 @@ export default function CreateChallengeScreen() {
       return;
     }
 
-    const startD = parseYmd(startDateStr);
-    const endD = parseYmd(endDateStr);
-    if (!startD || !endD) {
-      Alert.alert('알림', '시작일·종료일을 YYYY-MM-DD 형식으로 입력해 주세요.');
-      return;
-    }
-    const startNorm = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate());
-    const endNorm = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate());
+    const startNorm = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const endNorm = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
     if (startNorm > endNorm) {
       Alert.alert('알림', '종료일이 시작일보다 빠를 수 없습니다.');
       return;
@@ -136,6 +134,27 @@ export default function CreateChallengeScreen() {
           {editChallengeId ? '챌린지 수정' : '새 챌린지 만들기'}
         </Text>
 
+        <DatePickerModal
+          visible={datePickerTarget === 'start'}
+          value={startDate}
+          maximumDate={endDate}
+          onConfirm={(d) => {
+            setStartDate(d);
+            setDatePickerTarget(null);
+          }}
+          onCancel={() => setDatePickerTarget(null)}
+        />
+        <DatePickerModal
+          visible={datePickerTarget === 'end'}
+          value={endDate}
+          minimumDate={startDate}
+          onConfirm={(d) => {
+            setEndDate(d);
+            setDatePickerTarget(null);
+          }}
+          onCancel={() => setDatePickerTarget(null)}
+        />
+
         <View style={styles.field}>
           <Text style={styles.label}>챌린지 이름 *</Text>
           <TextInput
@@ -160,29 +179,27 @@ export default function CreateChallengeScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>시작일 * (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            value={startDateStr}
-            onChangeText={setStartDateStr}
-            placeholder="2026-01-01"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={10}
-          />
+          <Text style={styles.label}>시작일 *</Text>
+          <TouchableOpacity
+            style={styles.dateBtn}
+            onPress={() => setDatePickerTarget('start')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dateBtnText}>{formatDate(startDate)}</Text>
+            <Text style={styles.dateBtnIcon}>📅</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>종료일 * (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            value={endDateStr}
-            onChangeText={setEndDateStr}
-            placeholder="2026-01-28"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={10}
-          />
+          <Text style={styles.label}>종료일 *</Text>
+          <TouchableOpacity
+            style={styles.dateBtn}
+            onPress={() => setDatePickerTarget('end')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dateBtnText}>{formatDate(endDate)}</Text>
+            <Text style={styles.dateBtnIcon}>📅</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.field}>
@@ -390,6 +407,25 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
     fontSize: 16,
     color: '#1F2937',
+  },
+  dateBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateBtnText: {
+    fontSize: 16,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  dateBtnIcon: {
+    fontSize: 16,
   },
   textArea: {
     minHeight: 80,

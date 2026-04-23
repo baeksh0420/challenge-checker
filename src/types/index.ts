@@ -30,6 +30,8 @@ export interface Challenge {
   finePerMiss: number; // 미달성 시 벌금 (원)
   inviteCode: string; // 초대 코드 (6자리)
   participants: string[]; // user IDs
+  /** 참여자별 캘린더 컬러 { userId: hexColor } */
+  participantColors?: { [userId: string]: string };
   createdAt: string;
 }
 
@@ -43,6 +45,11 @@ export interface CheckIn {
   /** 사진 인증(type: photo)에 함께 남기는 글(선택) */
   textNote?: string;
   createdAt: string;
+  /** 이모지 반응 { userId[] } */
+  reactions?: {
+    thumbsUp: string[];
+    sad: string[];
+  };
 }
 
 export type MainTabParamList = {

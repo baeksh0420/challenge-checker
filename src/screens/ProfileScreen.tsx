@@ -22,6 +22,7 @@ import { formatLocalDate } from '../utils/fineCalculator';
 import { MainTabParamList, RootStackParamList } from '../types';
 import { challengeHasParticipant } from '../utils/challengeGuards';
 import { androidTopInsetStyle } from '../utils/androidTopInset';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 
 /** 프로필은 탭 + 상위 스택(상세·전체목록 등) 모두 사용 */
 type ProfileNav = CompositeNavigationProp<
@@ -35,6 +36,7 @@ export default function ProfileScreen() {
   const [name, setName] = useState(state.currentUser?.name ?? '');
   const [isEditing, setIsEditing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
 
   useEffect(() => {
     setName(state.currentUser?.name ?? '');
@@ -66,7 +68,7 @@ export default function ProfileScreen() {
     setIsEditing(false);
   };
 
-  const handlePickPhoto = async () => {
+  const openPhotoPicker = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('권한 필요', '갤러리 접근을 허용해 주세요.');
@@ -90,6 +92,18 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleAvatarPress = () => {
+    if (state.currentUser?.photoURL) {
+      Alert.alert('프로필 사진', undefined, [
+        { text: '크게 보기', onPress: () => setPhotoPreviewVisible(true) },
+        { text: '사진 변경', onPress: () => void openPhotoPicker() },
+        { text: '취소', style: 'cancel' },
+      ]);
+    } else {
+      void openPhotoPicker();
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <Modal visible={photoBusy} transparent animationType="fade" statusBarTranslucent>
@@ -109,7 +123,7 @@ export default function ProfileScreen() {
           <View style={styles.profileCard}>
             <TouchableOpacity
               style={styles.avatarWrap}
-              onPress={handlePickPhoto}
+              onPress={handleAvatarPress}
               disabled={photoBusy}
               activeOpacity={0.85}
             >
@@ -142,7 +156,9 @@ export default function ProfileScreen() {
                 ) : null}
               </View>
             </TouchableOpacity>
-            <Text style={styles.photoHint}>프로필 사진 탭하여 변경</Text>
+            <Text style={styles.photoHint}>
+            {state.currentUser?.photoURL ? '탭하여 크게 보기 · 변경' : '프로필 사진 탭하여 변경'}
+          </Text>
 
             {isEditing ? (
               <View style={styles.editRow}>
@@ -205,6 +221,11 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <ImagePreviewModal
+        visible={photoPreviewVisible}
+        imageUri={state.currentUser?.photoURL}
+        onClose={() => setPhotoPreviewVisible(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -10,6 +10,7 @@ import {
   getWeeklyProgressSegments,
   segmentBarColor,
 } from '../utils/participantProgressSegments';
+import { getChallengeParticipantAccent } from '../utils/participantColor';
 
 interface ParticipantProgressProps {
   challenge: Challenge;
@@ -27,6 +28,7 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
     const user = getUser(userId);
     if (!user) return null;
 
+    const accentColor = getChallengeParticipantAccent(challenge, state.users, userId);
     const fine = calculateFine(challenge, userId, state.checkIns);
     const segments =
       fineMode === 'daily'
@@ -51,14 +53,14 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
             transition={100}
           />
         ) : (
-          <View style={[styles.avatar, { backgroundColor: user.avatarColor }]}>
+          <View style={[styles.avatar, { backgroundColor: accentColor }]}>
             <Text style={styles.avatarText}>{user.name[0]}</Text>
           </View>
         )}
         <View style={styles.info}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{user.name}</Text>
-            <Text style={[styles.checkInCount, { color: user.avatarColor }]}>
+            <Text style={[styles.checkInCount, { color: accentColor }]}>
               {progressLabel}
             </Text>
           </View>
@@ -76,7 +78,7 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
                     style={[
                       styles.progressSegmentInner,
                       {
-                        backgroundColor: segmentBarColor(seg, user.avatarColor),
+                        backgroundColor: segmentBarColor(seg, accentColor),
                       },
                     ]}
                   />

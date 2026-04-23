@@ -22,7 +22,7 @@ import CalendarView from '../components/CalendarView';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import ParticipantProgress from '../components/ParticipantProgress';
 import { challengeHasParticipant, participantIds } from '../utils/challengeGuards';
-import { getParticipantAccent } from '../utils/participantColor';
+import { getChallengeParticipantAccent } from '../utils/participantColor';
 import {
   calculateFine,
   formatLocalDate,
@@ -55,11 +55,21 @@ export default function ChallengeDetailScreen() {
   const [selectedUserId, setSelectedUserId] = useState(CALENDAR_ALL_PARTICIPANTS);
   const [detailDate, setDetailDate] = useState<string | null>(null);
   const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
+  const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('#4F46E5');
+
+  const COLOR_PALETTE = [
+    '#EF4444', '#F59E0B', '#10B981', '#3B82F6',
+    '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16',
+    '#F97316', '#14B8A6', '#6366F1', '#A855F7',
+  ];
 
   useEffect(() => {
     if (!challenge) return;
-    setSelectedUserId(CALENDAR_ALL_PARTICIPANTS);
-  }, [challenge?.id]);
+    const uid = state.currentUser?.id;
+    const isP = uid ? challenge.participants.includes(uid) : false;
+    setSelectedUserId(isP && uid ? uid : CALENDAR_ALL_PARTICIPANTS);
+  }, [challenge?.id, state.currentUser?.id]);
 
   const checkedDates = useMemo(() => {
     if (!challenge) return new Set<string>();
@@ -194,7 +204,7 @@ export default function ChallengeDetailScreen() {
   const accent =
     selectedUserId === CALENDAR_ALL_PARTICIPANTS
       ? CALENDAR_ALL_ACCENT
-      : getParticipantAccent(state.users, selectedUserId);
+      : getChallengeParticipantAccent(challenge, state.users, selectedUserId);
 
   const isSelfCalendar =
     !!state.currentUser?.id &&
@@ -294,6 +304,24 @@ export default function ChallengeDetailScreen() {
 
         <Text style={styles.sectionTitle}>캘린더</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow}>
+          {/* 내 캘린더 먼저 */}
+          {isParticipant && state.currentUser?.id ? (() => {
+            const myUid = state.currentUser.id;
+            const isSelected = selectedUserId === myUid;
+            const tabAccent = getChallengeParticipantAccent(challenge, state.users, myUid);
+            return (
+              <TouchableOpacity
+                key="mine"
+                style={[styles.userTab, styles.myTab, isSelected && { backgroundColor: tabAccent }]}
+                onPress={() => setSelectedUserId(myUid)}
+              >
+                <Text style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}>
+                  내 캘린더
+                </Text>
+              </TouchableOpacity>
+            );
+          })() : null}
+          {/* 전체 */}
           <TouchableOpacity
             style={[
               styles.userTab,
@@ -312,27 +340,28 @@ export default function ChallengeDetailScreen() {
               전체
             </Text>
           </TouchableOpacity>
-          {participants.map((uid) => {
-            const user = getUser(uid);
-            const isSelected = uid === selectedUserId;
-            const tabAccent = getParticipantAccent(state.users, uid);
-            return (
-              <TouchableOpacity
-                key={uid}
-                style={[
-                  styles.userTab,
-                  isSelected && {
-                    backgroundColor: tabAccent,
-                  },
-                ]}
-                onPress={() => setSelectedUserId(uid)}
-              >
-                <Text style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}>
-                  {user?.name ?? '???'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {/* 기타 참여자 */}
+          {participants
+            .filter((uid) => uid !== state.currentUser?.id)
+            .map((uid) => {
+              const user = getUser(uid);
+              const isSelected = uid === selectedUserId;
+              const tabAccent = getChallengeParticipantAccent(challenge, state.users, uid);
+              return (
+                <TouchableOpacity
+                  key={uid}
+                  style={[
+                    styles.userTab,
+                    isSelected && { backgroundColor: tabAccent },
+                  ]}
+                  onPress={() => setSelectedUserId(uid)}
+                >
+                  <Text style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}>
+                    {user?.name ?? '???'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
         </ScrollView>
 
         <CalendarView
@@ -390,6 +419,35 @@ export default function ChallengeDetailScreen() {
               >
                 {hasCheckedInToday ? '인증 수정하기' : '오늘 인증하기'}
               </Text>
+            </TouchableOpacity>
+          ) : null}
+          {isParticipant && state.currentUser?.id ? (
+            <TouchableOpacity
+              style={styles.colorBtn}
+              onPress={() => {
+                const cur = getChallengeParticipantAccent(
+                  challenge,
+                  state.users,
+                  state.currentUser!.id
+                );
+                setSelectedColor(cur);
+                setColorPickerVisible(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.colorBtnDot,
+                  {
+                    backgroundColor: getChallengeParticipantAccent(
+                      challenge,
+                      state.users,
+                      state.currentUser.id
+                    ),
+                  },
+                ]}
+              />
+              <Text style={styles.colorBtnText}>내 컬러 변경</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -497,6 +555,58 @@ export default function ChallengeDetailScreen() {
         imageUri={photoPreviewUri}
         onClose={() => setPhotoPreviewUri(null)}
       />
+
+      <Modal
+        visible={colorPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setColorPickerVisible(false)}
+      >
+        <Pressable style={styles.colorBackdrop} onPress={() => setColorPickerVisible(false)}>
+          <Pressable style={styles.colorCard} onPress={() => {}}>
+            <Text style={styles.colorTitle}>내 캘린더 컬러 변경</Text>
+            <View style={styles.colorPalette}>
+              {COLOR_PALETTE.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorDot,
+                    { backgroundColor: color },
+                    selectedColor === color && styles.colorDotSelected,
+                  ]}
+                  onPress={() => setSelectedColor(color)}
+                  activeOpacity={0.8}
+                />
+              ))}
+            </View>
+            <View style={styles.colorPreviewRow}>
+              <View style={[styles.colorPreviewDot, { backgroundColor: selectedColor }]} />
+              <Text style={styles.colorPreviewText}>선택된 컬러</Text>
+            </View>
+            <View style={styles.colorActions}>
+              <TouchableOpacity
+                style={styles.colorCancelBtn}
+                onPress={() => setColorPickerVisible(false)}
+              >
+                <Text style={styles.colorCancelBtnText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.colorConfirmBtn}
+                onPress={() => {
+                  void (async () => {
+                    if (state.currentUser?.id) {
+                      await actions.updateParticipantColor(challenge.id, selectedColor);
+                    }
+                    setColorPickerVisible(false);
+                  })();
+                }}
+              >
+                <Text style={styles.colorConfirmBtnText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -681,6 +791,113 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontSize: 15,
     fontWeight: '700',
+  },
+  colorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  colorBtnDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  colorBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  myTab: {
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+  },
+  colorBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  colorCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 360,
+    padding: 24,
+  },
+  colorTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  colorPalette: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  colorDot: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  colorDotSelected: {
+    borderWidth: 3,
+    borderColor: '#1F2937',
+    transform: [{ scale: 1.15 }],
+  },
+  colorPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  colorPreviewDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  colorPreviewText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  colorActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  colorCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  colorCancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  colorConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+    alignItems: 'center',
+  },
+  colorConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   modalBackdrop: {
     flex: 1,

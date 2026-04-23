@@ -9,6 +9,7 @@ import {
   where,
   onSnapshot,
   arrayUnion,
+  arrayRemove,
   serverTimestamp,
   Unsubscribe,
   setDoc,
@@ -232,6 +233,29 @@ export function subscribeCheckInsByChallenge(
       } as CheckIn;
     });
     callback(checkIns);
+  });
+}
+
+export async function toggleCheckInReaction(
+  checkInId: string,
+  reactionType: 'thumbsUp' | 'sad',
+  userId: string,
+  hasReacted: boolean
+): Promise<void> {
+  const checkInRef = doc(db, CHECKINS, checkInId);
+  await updateDoc(checkInRef, {
+    [`reactions.${reactionType}`]: hasReacted ? arrayRemove(userId) : arrayUnion(userId),
+  });
+}
+
+export async function updateParticipantColor(
+  challengeId: string,
+  userId: string,
+  color: string
+): Promise<void> {
+  const challengeRef = doc(db, CHALLENGES, challengeId);
+  await updateDoc(challengeRef, {
+    [`participantColors.${userId}`]: color,
   });
 }
 
