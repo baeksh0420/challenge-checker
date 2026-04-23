@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { Challenge, RootStackParamList } from '../types';
@@ -27,7 +28,7 @@ export default function BoardListScreen() {
   }, [state.challenges, uid]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>게시판</Text>
         <Text style={styles.headerHint}>참여 중인 챌린지의 인증 피드를 볼 수 있어요</Text>

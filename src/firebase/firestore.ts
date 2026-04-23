@@ -13,6 +13,7 @@ import {
   Unsubscribe,
   setDoc,
   deleteDoc,
+  deleteField,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './config';
@@ -59,9 +60,19 @@ export async function updateUserProfile(
   await updateDoc(doc(db, USERS, userId), fields);
 }
 
+function uriToBlob(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => resolve(xhr.response as Blob);
+    xhr.onerror = () => reject(new Error('Failed to read local file'));
+    xhr.responseType = 'blob';
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+}
+
 export async function uploadUserAvatar(userId: string, uri: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const blob = await uriToBlob(uri);
   const imageRef = ref(storage, `avatars/${userId}.jpg`);
   await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(imageRef);
@@ -107,6 +118,10 @@ export async function updateChallenge(challenge: Challenge): Promise<void> {
     fineMode: challenge.fineMode,
     excludedDays: challenge.excludedDays,
     finePerMiss: challenge.finePerMiss,
+    weeklyFineRule:
+      challenge.fineMode === 'weekly'
+        ? (challenge.weeklyFineRule ?? 'flat')
+        : deleteField(),
   });
 }
 
@@ -238,8 +253,7 @@ export async function uploadCheckInImage(
   date: string,
   uri: string
 ): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const blob = await uriToBlob(uri);
   const imageRef = ref(storage, `checkIns/${challengeId}/${userId}/${date}.jpg`);
   await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(imageRef);

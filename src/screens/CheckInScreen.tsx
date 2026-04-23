@@ -18,6 +18,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList, CheckIn } from '../types';
 import { formatDate } from '../utils/fineCalculator';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 
 type Route = RouteProp<RootStackParamList, 'CheckIn'>;
 
@@ -28,7 +29,9 @@ export default function CheckInScreen() {
 
   const [type, setType] = useState<'text' | 'photo'>('text');
   const [textContent, setTextContent] = useState('');
+  const [photoCaption, setPhotoCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const checkInDate = route.params.date ?? formatDate(new Date());
@@ -128,6 +131,7 @@ export default function CheckInScreen() {
 
     let localUri: string | undefined;
     let content = type === 'text' ? textContent.trim() : '';
+    const captionTrim = photoCaption.trim();
     if (type === 'photo' && imageUri) {
       const isRemote = /^https?:\/\//i.test(imageUri);
       if (isRemote) {
@@ -146,6 +150,7 @@ export default function CheckInScreen() {
       date: checkInDate,
       type,
       content,
+      ...(type === 'photo' && captionTrim ? { textNote: captionTrim } : {}),
       createdAt: new Date().toISOString(),
     };
 
@@ -240,12 +245,18 @@ export default function CheckInScreen() {
           <View style={styles.photoSection}>
             {imageUri ? (
               <View style={styles.imagePreviewContainer}>
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.imagePreview}
-                  contentFit="cover"
-                  cachePolicy="none"
-                />
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  onPress={() => setPhotoPreviewUri(imageUri)}
+                  accessibilityLabel="사진 크�� 보기"
+                >
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={styles.imagePreview}
+                    contentFit="cover"
+                    cachePolicy="none"
+                  />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.removeImageBtn}
                   onPress={() => setImageUri(null)}
@@ -266,6 +277,19 @@ export default function CheckInScreen() {
                 </TouchableOpacity>
               </View>
             )}
+            <View style={[styles.field, styles.photoCaptionField]}>
+              <Text style={styles.photoCaptionLabel}>함께 남길 글 (선택)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, styles.photoCaptionInput]}
+                placeholder="사진과 함께 메모를 남길 수 있어요"
+                value={photoCaption}
+                onChangeText={setPhotoCaption}
+                multiline
+                maxLength={500}
+                editable={!submitting}
+              />
+              <Text style={styles.charCount}>{photoCaption.length}/500</Text>
+            </View>
           </View>
         )}
 
@@ -285,6 +309,12 @@ export default function CheckInScreen() {
           <Text style={styles.cancelBtnText}>취소</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -367,7 +397,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   photoSection: {
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  photoCaptionField: {
+    marginTop: 16,
+    marginBottom: 0,
+  },
+  photoCaptionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  photoCaptionInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   photoButtons: {
     flexDirection: 'row',

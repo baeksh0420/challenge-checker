@@ -13,15 +13,21 @@ import {
   Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList, User } from '../types';
 import CalendarView from '../components/CalendarView';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import ParticipantProgress from '../components/ParticipantProgress';
 import { challengeHasParticipant, participantIds } from '../utils/challengeGuards';
 import { getParticipantAccent } from '../utils/participantColor';
-import { calculateFine, formatLocalDate } from '../utils/fineCalculator';
+import {
+  calculateFine,
+  formatLocalDate,
+  getWeeklyFineRule,
+} from '../utils/fineCalculator';
 import { isRecentEndedChallenge } from '../utils/challengeLifecycle';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -48,6 +54,7 @@ export default function ChallengeDetailScreen() {
 
   const [selectedUserId, setSelectedUserId] = useState(CALENDAR_ALL_PARTICIPANTS);
   const [detailDate, setDetailDate] = useState<string | null>(null);
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
 
   useEffect(() => {
     if (!challenge) return;
@@ -100,7 +107,9 @@ export default function ChallengeDetailScreen() {
         const detail =
           f.fineMode === 'daily'
             ? `미인증 ${f.missedDays}일 · 일당 ${challenge.finePerMiss.toLocaleString()}원`
-            : `미달 ${f.missedWeeks}주 · 주당 ${challenge.finePerMiss.toLocaleString()}원`;
+            : getWeeklyFineRule(challenge) === 'perShortfall'
+              ? `누적 ${f.weeklyShortfallTotal}회 미달 · ${challenge.finePerMiss.toLocaleString()}원/회`
+              : `미달 ${f.missedWeeks}주 · 주당 ${challenge.finePerMiss.toLocaleString()}원`;
         fined.push({ user: u, amount: f.totalFine, detail });
       }
     }
@@ -117,7 +126,7 @@ export default function ChallengeDetailScreen() {
 
   const participants = participantIds(challenge);
   const isParticipant = challengeHasParticipant(challenge, state.currentUser?.id);
-  const isActive = now >= new Date(challenge.startDate) && now <= new Date(challenge.endDate);
+  const isActive = todayStr >= challenge.startDate && todayStr <= challenge.endDate;
 
   const isCreator = state.currentUser?.id === challenge.creatorId;
 
@@ -151,6 +160,22 @@ export default function ChallengeDetailScreen() {
         },
       ]
     );
+  };
+
+  const openCreatorMenu = () => {
+    Alert.alert(`${challenge.title} 편집`, undefined, [
+      {
+        text: '수정',
+        onPress: () =>
+          navigation.navigate('CreateChallenge', { editChallengeId: challenge.id }),
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => handleDelete(),
+      },
+      { text: '취소', style: 'cancel' },
+    ]);
   };
 
   const handleShareInviteCode = async () => {
@@ -218,7 +243,18 @@ export default function ChallengeDetailScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.title}>{challenge.title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{challenge.title}</Text>
+          {isCreator ? (
+            <TouchableOpacity
+              style={styles.titleEditHit}
+              onPress={openCreatorMenu}
+              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+            >
+              <Ionicons name="pencil" size={19} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
         {challenge.description ? <Text style={styles.description}>{challenge.description}</Text> : null}
 
         <View style={styles.infoBox}>
@@ -235,8 +271,11 @@ export default function ChallengeDetailScreen() {
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>벌금</Text>
             <Text style={styles.infoValue}>
-              {challenge.finePerMiss.toLocaleString()}원/
-              {(challenge.fineMode ?? 'weekly') === 'daily' ? '일' : '주'}
+              {(challenge.fineMode ?? 'weekly') === 'daily'
+                ? `${challenge.finePerMiss.toLocaleString()}원/일`
+                : getWeeklyFineRule(challenge) === 'perShortfall'
+                  ? `${challenge.finePerMiss.toLocaleString()}원/부족 1회`
+                  : `${challenge.finePerMiss.toLocaleString()}원/주(주 1회)`}
             </Text>
           </View>
           {challenge.fineMode === 'daily' && challenge.excludedDays?.length > 0 ? (
@@ -353,23 +392,6 @@ export default function ChallengeDetailScreen() {
               </Text>
             </TouchableOpacity>
           ) : null}
-          {isCreator ? (
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() =>
-                navigation.navigate('CreateChallenge', {
-                  editChallengeId: challenge.id,
-                })
-              }
-            >
-              <Text style={styles.editBtnText}>챌린지 수정</Text>
-            </TouchableOpacity>
-          ) : null}
-          {isCreator ? (
-            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-              <Text style={styles.deleteBtnText}>챌린지 삭제</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       </ScrollView>
 
@@ -441,14 +463,25 @@ export default function ChallengeDetailScreen() {
                       {ci.type === 'text' ? (
                         <Text style={styles.feedText}>{String(ci.content ?? '')}</Text>
                       ) : (
-                        <Image
-                          source={{ uri: ci.content }}
-                          style={styles.feedImage}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                          recyclingKey={ci.id}
-                          transition={150}
-                        />
+                        <>
+                          <TouchableOpacity
+                            activeOpacity={0.92}
+                            onPress={() => setPhotoPreviewUri(ci.content)}
+                            accessibilityLabel="사진 크게 보기"
+                          >
+                            <Image
+                              source={{ uri: ci.content }}
+                              style={styles.feedImage}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              recyclingKey={ci.id}
+                              transition={150}
+                            />
+                          </TouchableOpacity>
+                          {ci.textNote ? (
+                            <Text style={styles.feedText}>{ci.textNote}</Text>
+                          ) : null}
+                        </>
                       )}
                     </View>
                   );
@@ -458,6 +491,12 @@ export default function ChallengeDetailScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -543,11 +582,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 6,
+  },
   title: {
+    flex: 1,
     fontSize: 24,
     fontWeight: '800',
     color: '#1F2937',
-    marginBottom: 8,
+  },
+  titleEditHit: {
+    paddingTop: 4,
+    paddingLeft: 2,
   },
   description: {
     fontSize: 15,
@@ -619,32 +668,6 @@ const styles = StyleSheet.create({
   },
   checkInBtnTextMuted: {
     color: '#6B7280',
-  },
-  editBtn: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  editBtnText: {
-    color: '#4F46E5',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  deleteBtn: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  deleteBtnText: {
-    color: '#EF4444',
-    fontSize: 16,
-    fontWeight: '700',
   },
   inviteBtn: {
     backgroundColor: '#EEF2FF',

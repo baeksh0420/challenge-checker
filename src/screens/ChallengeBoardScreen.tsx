@@ -1,9 +1,17 @@
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList } from '../types';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 
 type Route = RouteProp<RootStackParamList, 'ChallengeBoard'>;
 
@@ -16,6 +24,7 @@ export default function ChallengeBoardScreen() {
   const route = useRoute<Route>();
   const { state } = useAppContext();
   const challengeId = route.params.challengeId;
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
 
   const challenge = state.challenges.find((c) => c.id === challengeId);
 
@@ -52,24 +61,45 @@ export default function ChallengeBoardScreen() {
               <View style={styles.cardHead}>
                 <Text style={styles.author}>{author?.name ?? '알 수 없음'}</Text>
                 <Text style={styles.dateLine}>
-                  {ci.date} · {ci.type === 'photo' ? '사진' : '텍스트'}
+                  {ci.date} ·{' '}
+                  {ci.type === 'photo'
+                    ? ci.textNote
+                      ? '사진 + 글'
+                      : '사진'
+                    : '텍스트'}
                 </Text>
               </View>
               {ci.type === 'text' ? (
                 <Text style={styles.body}>{String(ci.content ?? '')}</Text>
               ) : (
-                <Image
-                  source={{ uri: ci.content }}
-                  style={styles.photo}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  recyclingKey={ci.id}
-                  transition={150}
-                />
+                <>
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => setPhotoPreviewUri(ci.content)}
+                    accessibilityLabel="사진 크게 보기"
+                  >
+                    <Image
+                      source={{ uri: ci.content }}
+                      style={styles.photo}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      recyclingKey={ci.id}
+                      transition={150}
+                    />
+                  </TouchableOpacity>
+                  {ci.textNote ? (
+                    <Text style={[styles.body, styles.photoNote]}>{ci.textNote}</Text>
+                  ) : null}
+                </>
               )}
             </View>
           );
         }}
+      />
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
       />
     </SafeAreaView>
   );
@@ -137,5 +167,8 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
+  },
+  photoNote: {
+    marginTop: 10,
   },
 });

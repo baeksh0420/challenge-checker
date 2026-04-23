@@ -7,6 +7,13 @@ export interface FineResult {
   missedDays: number;
   totalDays: number;
   fineMode: 'weekly' | 'daily';
+  /** 주당 모드: 마감된 주들의 (필수−인증 일수) 합. 일당 모드에서는 0 */
+  weeklyShortfallTotal: number;
+}
+
+export function getWeeklyFineRule(challenge: Challenge): 'flat' | 'perShortfall' {
+  if ((challenge.fineMode ?? 'weekly') !== 'weekly') return 'flat';
+  return challenge.weeklyFineRule ?? 'flat';
 }
 
 /** 로컬(기기) 기준 YYYY-MM-DD — 인증일·오늘·주(월~일) 계산에 통일 */
@@ -147,7 +154,9 @@ export function calculateFine(
 
   let totalWeeks = 0;
   let missedWeeks = 0;
+  let weeklyShortfallTotal = 0;
   let weekMon = startOfLocalMondayWeek(startD);
+  const requiredDays = challenge.requiredDaysPerWeek;
 
   while (true) {
     const ws = formatLocalDate(weekMon);
@@ -164,7 +173,10 @@ export function calculateFine(
       }
       if (segEnd < todayStr) {
         totalWeeks++;
-        if (daysInWeek < challenge.requiredDaysPerWeek) missedWeeks++;
+        if (daysInWeek < requiredDays) {
+          missedWeeks++;
+          weeklyShortfallTotal += requiredDays - daysInWeek;
+        }
       }
     }
     weekMon.setDate(weekMon.getDate() + 7);
@@ -190,10 +202,13 @@ export function calculateFine(
     dayIter.setDate(dayIter.getDate() + 1);
   }
 
+  const weeklyRule = getWeeklyFineRule(challenge);
   const totalFine =
     fineMode === 'daily'
       ? missedDays * challenge.finePerMiss
-      : missedWeeks * challenge.finePerMiss;
+      : weeklyRule === 'perShortfall'
+        ? weeklyShortfallTotal * challenge.finePerMiss
+        : missedWeeks * challenge.finePerMiss;
 
   return {
     totalFine,
@@ -202,6 +217,7 @@ export function calculateFine(
     missedDays,
     totalDays,
     fineMode,
+    weeklyShortfallTotal: fineMode === 'weekly' ? weeklyShortfallTotal : 0,
   };
 }
 

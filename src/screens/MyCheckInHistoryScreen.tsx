@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -25,6 +26,7 @@ export default function MyCheckInHistoryScreen() {
   const { state, actions } = useAppContext();
   const navigation = useNavigation<Nav>();
   const uid = state.currentUser?.id;
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
 
   const items = useMemo(() => {
     if (!uid) return [] as CheckIn[];
@@ -88,14 +90,23 @@ export default function MyCheckInHistoryScreen() {
                   <Text style={styles.body}>{String(ci.content ?? '')}</Text>
                 ) : (
                   <>
-                    <Image
-                      source={{ uri: ci.content }}
-                      style={styles.photo}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      recyclingKey={ci.id}
-                      transition={150}
-                    />
+                    <TouchableOpacity
+                      activeOpacity={0.92}
+                      onPress={() => setPhotoPreviewUri(ci.content)}
+                      accessibilityLabel="사진 크게 보기"
+                    >
+                      <Image
+                        source={{ uri: ci.content }}
+                        style={styles.photo}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        recyclingKey={ci.id}
+                        transition={150}
+                      />
+                    </TouchableOpacity>
+                    {ci.textNote ? (
+                      <Text style={[styles.body, styles.photoNote]}>{ci.textNote}</Text>
+                    ) : null}
                   </>
                 )}
               </View>
@@ -103,6 +114,11 @@ export default function MyCheckInHistoryScreen() {
           })
         )}
       </ScrollView>
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -181,5 +197,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
     marginTop: 4,
+  },
+  photoNote: {
+    marginTop: 10,
   },
 });

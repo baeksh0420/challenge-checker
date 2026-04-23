@@ -48,6 +48,7 @@ export default function CreateChallengeScreen() {
   const [endDateStr, setEndDateStr] = useState(formatDate(defaultEndDate(today)));
   const [requiredDays, setRequiredDays] = useState('5');
   const [fineMode, setFineMode] = useState<'weekly' | 'daily'>('weekly');
+  const [weeklyFineRule, setWeeklyFineRule] = useState<'flat' | 'perShortfall'>('flat');
   const [excludedDays, setExcludedDays] = useState<number[]>([]);
   const [fineAmount, setFineAmount] = useState('10000');
 
@@ -59,6 +60,7 @@ export default function CreateChallengeScreen() {
     setEndDateStr(editingChallenge.endDate);
     setRequiredDays(String(editingChallenge.requiredDaysPerWeek));
     setFineMode(editingChallenge.fineMode ?? 'weekly');
+    setWeeklyFineRule(editingChallenge.weeklyFineRule ?? 'flat');
     setExcludedDays(editingChallenge.excludedDays ?? []);
     setFineAmount(String(editingChallenge.finePerMiss));
   }, [editingChallenge?.id]);
@@ -97,6 +99,7 @@ export default function CreateChallengeScreen() {
         endDate: formatDate(endNorm),
         requiredDaysPerWeek: Math.min(parseInt(requiredDays, 10) || 5, 7),
         fineMode,
+        ...(fineMode === 'weekly' ? { weeklyFineRule } : {}),
         excludedDays: fineMode === 'daily' ? excludedDays : [],
         finePerMiss: parseInt(fineAmount, 10) || 10000,
       };
@@ -114,6 +117,7 @@ export default function CreateChallengeScreen() {
       endDate: formatDate(endNorm),
       requiredDaysPerWeek: Math.min(parseInt(requiredDays, 10) || 5, 7),
       fineMode,
+      ...(fineMode === 'weekly' ? { weeklyFineRule } : {}),
       excludedDays: fineMode === 'daily' ? excludedDays : [],
       finePerMiss: parseInt(fineAmount, 10) || 10000,
       inviteCode: '',
@@ -225,16 +229,61 @@ export default function CreateChallengeScreen() {
         </View>
 
         {fineMode === 'weekly' ? (
-          <View style={styles.field}>
-            <Text style={styles.label}>주당 필수 횟수 (이번 주 목표)</Text>
-            <TextInput
-              style={styles.input}
-              value={requiredDays}
-              onChangeText={setRequiredDays}
-              keyboardType="number-pad"
-              maxLength={1}
-            />
-          </View>
+          <>
+            <View style={styles.field}>
+              <Text style={styles.label}>주당 필수 횟수 (이번 주 목표)</Text>
+              <TextInput
+                style={styles.input}
+                value={requiredDays}
+                onChangeText={setRequiredDays}
+                keyboardType="number-pad"
+                maxLength={1}
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>주당 벌금 방식</Text>
+              <View style={styles.toggleRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.toggleBtn,
+                    weeklyFineRule === 'flat' && styles.toggleBtnActive,
+                  ]}
+                  onPress={() => setWeeklyFineRule('flat')}
+                >
+                  <Text
+                    style={[
+                      styles.toggleBtnText,
+                      weeklyFineRule === 'flat' && styles.toggleBtnTextActive,
+                    ]}
+                  >
+                    주 1회
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.toggleBtn,
+                    weeklyFineRule === 'perShortfall' && styles.toggleBtnActive,
+                  ]}
+                  onPress={() => setWeeklyFineRule('perShortfall')}
+                >
+                  <Text
+                    style={[
+                      styles.toggleBtnText,
+                      weeklyFineRule === 'perShortfall' &&
+                        styles.toggleBtnTextActive,
+                    ]}
+                  >
+                    부족 횟수당
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.modeHint}>
+                {weeklyFineRule === 'flat'
+                  ? '한 주에 한 번이라도 목표에 못 미치면, 그 주 벌금이 1회 적용됩니다.'
+                  : '마감된 각 주마다 (목표 − 실제 인증 일수)만큼 벌금이 곱해집니다.'}
+              </Text>
+            </View>
+          </>
         ) : null}
 
         {fineMode === 'daily' ? (
@@ -275,7 +324,11 @@ export default function CreateChallengeScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>
-            미달성 시 {fineMode === 'weekly' ? '주당' : '일당'} 벌금 (원)
+            {fineMode === 'weekly'
+              ? weeklyFineRule === 'flat'
+                ? '미달 시 주당 벌금 (원, 주당 1회)'
+                : '미달 1회당 벌금 (원, 부족 횟수만큼 누적)'
+              : '미달성 시 일당 벌금 (원)'}
           </Text>
           <TextInput
             style={styles.input}

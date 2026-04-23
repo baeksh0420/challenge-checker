@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { useAppContext } from '../store/AppContext';
 import { Challenge, User } from '../types';
-import { calculateFine } from '../utils/fineCalculator';
+import { calculateFine, getWeeklyFineRule } from '../utils/fineCalculator';
 import { participantIds } from '../utils/challengeGuards';
 import {
   getDailyProgressSegments,
@@ -93,7 +93,9 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
               벌금: {fine.totalFine.toLocaleString()}원 (
               {fine.fineMode === 'daily'
                 ? `${fine.missedDays}일 미인증`
-                : `${fine.missedWeeks}주 미달성`}
+                : getWeeklyFineRule(challenge) === 'perShortfall'
+                  ? `누적 ${fine.weeklyShortfallTotal}회 미달`
+                  : `${fine.missedWeeks}주 미달성`}
               )
             </Text>
           )}

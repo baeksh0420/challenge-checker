@@ -13,6 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAppContext } from '../store/AppContext';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
 
 function mapAuthError(message: string, code?: string): string {
   const c = code ?? '';
@@ -73,7 +74,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <KeyboardAvoidingView
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

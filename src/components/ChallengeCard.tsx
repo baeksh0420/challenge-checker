@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Challenge } from '../types';
-import { useAppContext } from '../store/AppContext';
-import { challengeHasParticipant, participantIds } from '../utils/challengeGuards';
+import { participantIds } from '../utils/challengeGuards';
+import { formatLocalDate } from '../utils/fineCalculator';
 
 interface ChallengeCardProps {
   challenge: Challenge;
@@ -28,16 +28,13 @@ export default function ChallengeCard({
   hideDescription = false,
   hideStatusBadge = false,
 }: ChallengeCardProps) {
-  const { state } = useAppContext();
   const participants = participantIds(challenge);
   const participantCount = participants.length;
-  const isJoined = challengeHasParticipant(challenge, state.currentUser?.id);
 
-  const startDate = new Date(challenge.startDate);
-  const endDate = new Date(challenge.endDate);
   const now = new Date();
-  const isActive = now >= startDate && now <= endDate;
-  const isUpcoming = now < startDate;
+  const todayStr = formatLocalDate(now);
+  const isActive = todayStr >= challenge.startDate && todayStr <= challenge.endDate;
+  const isUpcoming = todayStr < challenge.startDate;
 
   const statusText = isActive ? '진행 중' : isUpcoming ? '예정' : '종료';
   const statusColor = isActive ? '#10B981' : isUpcoming ? '#F59E0B' : '#6B7280';
@@ -88,11 +85,6 @@ export default function ChallengeCard({
                 벌금 {challenge.finePerMiss.toLocaleString()}원
               </Text>
             </View>
-            {isJoined && (
-              <View style={[styles.joinedBadge, done && styles.joinedBadgeDone]}>
-                <Text style={[styles.joinedText, done && styles.joinedTextDone]}>참여 중</Text>
-              </View>
-            )}
           </View>
 
           <Text style={[styles.dateRange, done && styles.dateRangeDone]}>
@@ -210,23 +202,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#4B5563',
-  },
-  joinedBadge: {
-    backgroundColor: '#4F46E520',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  joinedText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4F46E5',
-  },
-  joinedBadgeDone: {
-    backgroundColor: '#9CA3AF40',
-  },
-  joinedTextDone: {
-    color: '#6B7280',
   },
   dateRange: {
     fontSize: 12,

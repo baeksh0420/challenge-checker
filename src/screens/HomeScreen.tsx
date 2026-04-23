@@ -14,6 +14,8 @@ import { Challenge, RootStackParamList } from '../types';
 import ChallengeCard from '../components/ChallengeCard';
 import { challengeHasParticipant } from '../utils/challengeGuards';
 import { isRecentEndedChallenge } from '../utils/challengeLifecycle';
+import { formatLocalDate } from '../utils/fineCalculator';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -25,11 +27,12 @@ export default function HomeScreen() {
 
   const { activeChallenges, recentEndedChallenges } = useMemo(() => {
     const now = new Date();
+    const todayStr = formatLocalDate(now);
     const my = state.challenges.filter((c) =>
       challengeHasParticipant(c, state.currentUser?.id)
     );
     const active = my.filter(
-      (c) => now >= new Date(c.startDate) && now <= new Date(c.endDate)
+      (c) => todayStr >= c.startDate && todayStr <= c.endDate
     );
     const recent = my.filter((c) => isRecentEndedChallenge(c, now));
     return { activeChallenges: active, recentEndedChallenges: recent };
@@ -47,7 +50,7 @@ export default function HomeScreen() {
   }, [activeChallenges, recentEndedChallenges]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>챌린지체커</Text>
       </View>

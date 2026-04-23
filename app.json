@@ -30,7 +30,8 @@
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA"
       ]
     },
     "runtimeVersion": "1.0.0",
@@ -43,7 +44,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "챌린지 인증을 위해 사진 접근 권한이 필요합니다."
+          "photosPermission": "챌린지 인증을 위해 사진 접근 권한이 필요합니다.",
+          "cameraPermission": "챌린지 인증을 위해 카메라 접근 권한이 필요합니다."
         }
       ]
     ],

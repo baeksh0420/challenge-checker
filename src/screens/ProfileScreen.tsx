@@ -18,8 +18,10 @@ import { CompositeNavigationProp, useNavigation } from '@react-navigation/native
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
+import { formatLocalDate } from '../utils/fineCalculator';
 import { MainTabParamList, RootStackParamList } from '../types';
 import { challengeHasParticipant } from '../utils/challengeGuards';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
 
 /** 프로필은 탭 + 상위 스택(상세·전체목록 등) 모두 사용 */
 type ProfileNav = CompositeNavigationProp<
@@ -53,8 +55,8 @@ export default function ProfileScreen() {
 
   const totalCheckIns = myCheckIns.length;
   const activeChallenges = myChallenges.filter((c) => {
-    const now = new Date();
-    return now >= new Date(c.startDate) && now <= new Date(c.endDate);
+    const todayStr = formatLocalDate(new Date());
+    return todayStr >= c.startDate && todayStr <= c.endDate;
   }).length;
 
   const handleSaveName = async () => {
@@ -89,7 +91,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <Modal visible={photoBusy} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.loadingBackdrop}>
           <View style={styles.loadingCard}>

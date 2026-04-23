@@ -18,6 +18,7 @@ import {
   needsDailyReminder,
   needsWeeklyReminder,
 } from '../utils/fineCalculator';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -89,7 +90,7 @@ export default function MyChallengesScreen() {
   }, [uid, state.challenges, state.checkIns, todayStr]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>오늘인증</Text>
         <Text style={styles.headerHint}>

@@ -20,6 +20,12 @@ export interface Challenge {
   requiredDaysPerWeek: number; // 주당 필수 수행 횟수
   /** weekly: 주간은 월~일(로컬) 기준 */
   fineMode: 'weekly' | 'daily';
+  /**
+   * 주당 벌금만 해당. 일당 모드에서는 저장하지 않음.
+   * - flat: 마감된 주에 목표 미달이면 그 주당 벌금 1회(기존)
+   * - perShortfall: 각 마감 주마다 (필수 횟수 − 실제 인증 일수)만큼 벌금 단위 누적
+   */
+  weeklyFineRule?: 'flat' | 'perShortfall';
   excludedDays: number[]; // 제외 요일 (0=일, 1=월, ..., 6=토) - 일당 모드용
   finePerMiss: number; // 미달성 시 벌금 (원)
   inviteCode: string; // 초대 코드 (6자리)
@@ -34,6 +40,8 @@ export interface CheckIn {
   date: string; // ISO date string (YYYY-MM-DD)
   type: 'photo' | 'text';
   content: string; // 텍스트 내용 또는 이미지 URI
+  /** 사진 인증(type: photo)에 함께 남기는 글(선택) */
+  textNote?: string;
   createdAt: string;
 }
 
