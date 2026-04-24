@@ -1,4 +1,5 @@
 import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -8,7 +9,6 @@ import { useAppContext } from '../store/AppContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
-import MyChallengesScreen from '../screens/MyChallengesScreen';
 import BoardListScreen from '../screens/BoardListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateChallengeScreen from '../screens/CreateChallengeScreen';
@@ -40,8 +40,6 @@ function MainTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'MyChallenges') {
-            iconName = focused ? 'today' : 'today-outline';
           } else if (route.name === 'Board') {
             iconName = focused ? 'newspaper' : 'newspaper-outline';
           } else if (route.name === 'Profile') {
@@ -55,11 +53,6 @@ function MainTabs() {
         name="Home"
         component={HomeScreen}
         options={{ tabBarLabel: '홈' }}
-      />
-      <Tab.Screen
-        name="MyChallenges"
-        component={MyChallengesScreen}
-        options={{ tabBarLabel: '오늘인증' }}
       />
       <Tab.Screen
         name="Board"
@@ -78,6 +71,14 @@ function MainTabs() {
 export default function AppNavigator() {
   const { state } = useAppContext();
   const isLoggedIn = !!state.currentUser;
+
+  if (state.authLoading) {
+    return (
+      <View style={loadingStyles.container}>
+        <ActivityIndicator size="large" color="#4F46E5" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
@@ -105,7 +106,7 @@ export default function AppNavigator() {
           <Stack.Screen
             name="ChallengeDetail"
             component={ChallengeDetailScreen}
-            options={{ title: '챌린지 상세' }}
+            options={{ headerTitle: '' }}
           />
           <Stack.Screen
             name="ChallengeBoard"
@@ -139,3 +140,12 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const loadingStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+});

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRoute, RouteProp } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList } from '../types';
 import ImagePreviewModal from '../components/ImagePreviewModal';
@@ -38,7 +39,7 @@ export default function ChallengeBoardScreen() {
   const getUser = (userId: string) => state.users.find((u) => u.id === userId);
 
   const handleReaction = (ci: CheckIn, type: 'thumbsUp' | 'sad') => {
-    if (!myId || ci.userId === myId) return;
+    if (!myId) return;
     const list = ci.reactions?.[type] ?? [];
     const hasReacted = list.includes(myId);
     void actions.toggleCheckInReaction(ci.id, type, hasReacted);
@@ -64,7 +65,6 @@ export default function ChallengeBoardScreen() {
         }
         renderItem={({ item: ci }) => {
           const author = getUser(ci.userId);
-          const isOwn = ci.userId === myId;
           const thumbsUpList = ci.reactions?.thumbsUp ?? [];
           const sadList = ci.reactions?.sad ?? [];
           const myThumbsUp = myId ? thumbsUpList.includes(myId) : false;
@@ -112,13 +112,11 @@ export default function ChallengeBoardScreen() {
                   style={[
                     styles.reactionBtn,
                     myThumbsUp && styles.reactionBtnActive,
-                    isOwn && styles.reactionBtnDisabled,
                   ]}
                   onPress={() => handleReaction(ci, 'thumbsUp')}
-                  disabled={isOwn}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.reactionEmoji}>👍</Text>
+                  <Ionicons name={myThumbsUp ? 'thumbs-up' : 'thumbs-up-outline'} size={16} color={myThumbsUp ? '#4F46E5' : '#9CA3AF'} />
                   {thumbsUpList.length > 0 ? (
                     <Text style={[styles.reactionCount, myThumbsUp && styles.reactionCountActive]}>
                       {thumbsUpList.length}
@@ -130,13 +128,11 @@ export default function ChallengeBoardScreen() {
                   style={[
                     styles.reactionBtn,
                     mySad && styles.reactionBtnActive,
-                    isOwn && styles.reactionBtnDisabled,
                   ]}
                   onPress={() => handleReaction(ci, 'sad')}
-                  disabled={isOwn}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.reactionEmoji}>😢</Text>
+                  <Ionicons name={mySad ? 'sad' : 'sad-outline'} size={16} color={mySad ? '#4F46E5' : '#9CA3AF'} />
                   {sadList.length > 0 ? (
                     <Text style={[styles.reactionCount, mySad && styles.reactionCountActive]}>
                       {sadList.length}
@@ -241,12 +237,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF',
     borderWidth: 1,
     borderColor: '#C7D2FE',
-  },
-  reactionBtnDisabled: {
-    opacity: 0.4,
-  },
-  reactionEmoji: {
-    fontSize: 16,
   },
   reactionCount: {
     fontSize: 13,

@@ -54,7 +54,6 @@ export interface CheckIn {
 
 export type MainTabParamList = {
   Home: undefined;
-  MyChallenges: undefined;
   Board: undefined;
   Profile: undefined;
 };

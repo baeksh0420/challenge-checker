@@ -138,6 +138,13 @@ export default function ChallengeDetailScreen() {
   const isParticipant = challengeHasParticipant(challenge, state.currentUser?.id);
   const isActive = todayStr >= challenge.startDate && todayStr <= challenge.endDate;
 
+  const totalFineSum = useMemo(() => {
+    return participants.reduce((sum, uid) => {
+      const f = calculateFine(challenge, uid, state.checkIns);
+      return sum + f.totalFine;
+    }, 0);
+  }, [challenge, state.checkIns, participants]);
+
   const isCreator = state.currentUser?.id === challenge.creatorId;
 
   const hasCheckedInToday = state.checkIns.some(
@@ -192,7 +199,7 @@ export default function ChallengeDetailScreen() {
     const code = challenge.inviteCode ?? '';
     try {
       await Share.share({
-        message: `챌린지 "${challenge.title}"에 참여하세요!\n초대 코드: ${code}`,
+        message: `'${challenge.title}' 초대코드 공유 : ${code}`,
       });
     } catch {
       Alert.alert('초대 코드', `코드: ${code}\n이 코드를 참여자에게 공유하세요.`);
@@ -255,6 +262,15 @@ export default function ChallengeDetailScreen() {
 
         <View style={styles.titleRow}>
           <Text style={styles.title}>{challenge.title}</Text>
+          {isParticipant ? (
+            <TouchableOpacity
+              style={styles.titleEditHit}
+              onPress={handleShareInviteCode}
+              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
+            >
+              <Ionicons name="key-outline" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : null}
           {isCreator ? (
             <TouchableOpacity
               style={styles.titleEditHit}
@@ -267,36 +283,60 @@ export default function ChallengeDetailScreen() {
         </View>
         {challenge.description ? <Text style={styles.description}>{challenge.description}</Text> : null}
 
-        <View style={styles.infoBox}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>기간</Text>
-            <Text style={styles.infoValue}>
-              {challenge.startDate} ~ {challenge.endDate}
+        <View style={styles.infoBoxRow}>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardValue}>
+              {challenge.startDate.slice(5)} ~ {challenge.endDate.slice(5)}
             </Text>
+            <Text style={styles.infoCardLabel}>기간</Text>
           </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>주당 필수</Text>
-            <Text style={styles.infoValue}>{challenge.requiredDaysPerWeek}회</Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>벌금</Text>
-            <Text style={styles.infoValue}>
-              {(challenge.fineMode ?? 'weekly') === 'daily'
-                ? `${challenge.finePerMiss.toLocaleString()}원/일`
-                : getWeeklyFineRule(challenge) === 'perShortfall'
-                  ? `${challenge.finePerMiss.toLocaleString()}원/부족 1회`
-                  : `${challenge.finePerMiss.toLocaleString()}원/주(주 1회)`}
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardValue}>
+              {totalFineSum.toLocaleString()}원
             </Text>
+            <Text style={styles.infoCardLabel}>누적 벌금</Text>
           </View>
-          {challenge.fineMode === 'daily' && challenge.excludedDays?.length > 0 ? (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>제외 요일</Text>
-              <Text style={styles.infoValue}>
-                {challenge.excludedDays.map((d: number) => DAY_LABELS[d]).join(', ')}
-              </Text>
-            </View>
-          ) : null}
+          <View style={styles.infoCard}>
+            {challenge.fineMode === 'daily' ? (
+              <>
+                <Text style={styles.infoCardValue}>
+                  {challenge.excludedDays?.length > 0
+                    ? challenge.excludedDays.map((d: number) => DAY_LABELS[d]).join(', ')
+                    : '없음'}
+                </Text>
+                <Text style={styles.infoCardLabel}>제외 요일</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.infoCardValue}>{challenge.requiredDaysPerWeek}회</Text>
+                <Text style={styles.infoCardLabel}>주당 필수</Text>
+              </>
+            )}
+          </View>
         </View>
+
+        {isParticipant && isActive ? (
+          <TouchableOpacity
+            style={[
+              styles.checkInBtn,
+              hasCheckedInToday && styles.checkInBtnMuted,
+            ]}
+            onPress={() =>
+              navigation.navigate('CheckIn', {
+                challengeId: challenge.id,
+              })
+            }
+          >
+            <Text
+              style={[
+                styles.checkInBtnText,
+                hasCheckedInToday && styles.checkInBtnTextMuted,
+              ]}
+            >
+              {hasCheckedInToday ? '인증 수정하기' : '오늘 인증하기'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         <ParticipantProgress challenge={challenge} />
 
@@ -392,35 +432,6 @@ export default function ChallengeDetailScreen() {
         />
 
         <View style={styles.actionRow}>
-          {isParticipant ? (
-            <TouchableOpacity style={styles.inviteBtn} onPress={handleShareInviteCode}>
-              <Text style={styles.inviteBtnText}>
-                📨 초대 코드 공유: {challenge.inviteCode ?? ''}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          {isParticipant && isActive ? (
-            <TouchableOpacity
-              style={[
-                styles.checkInBtn,
-                hasCheckedInToday && styles.checkInBtnMuted,
-              ]}
-              onPress={() =>
-                navigation.navigate('CheckIn', {
-                  challengeId: challenge.id,
-                })
-              }
-            >
-              <Text
-                style={[
-                  styles.checkInBtnText,
-                  hasCheckedInToday && styles.checkInBtnTextMuted,
-                ]}
-              >
-                {hasCheckedInToday ? '인증 수정하기' : '오늘 인증하기'}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
           {isParticipant && state.currentUser?.id ? (
             <TouchableOpacity
               style={styles.colorBtn}
@@ -451,6 +462,14 @@ export default function ChallengeDetailScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {challenge.fineMode !== 'daily' ? (
+          <Text style={styles.weeklyFineHint}>
+            {getWeeklyFineRule(challenge) === 'perShortfall'
+              ? `주간 벌금: 매주 월~일 기준, 부족한 횟수 × ${challenge.finePerMiss.toLocaleString()}원이 누적됩니다.`
+              : `주간 벌금: 매주 월~일 기준, 목표 미달 시 주당 ${challenge.finePerMiss.toLocaleString()}원이 부과됩니다.`}
+          </Text>
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -714,25 +733,37 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 22,
   },
-  infoBox: {
+  infoBoxRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  infoCard: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    gap: 10,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
-  infoItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  infoLabel: {
+  infoCardValue: {
     fontSize: 14,
-    color: '#6B7280',
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '800',
     color: '#1F2937',
+    textAlign: 'center',
+  },
+  infoCardLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '600',
+  },
+  weeklyFineHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
   },
   sectionTitle: {
     fontSize: 16,
@@ -765,6 +796,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
+    marginBottom: 20,
   },
   checkInBtnMuted: {
     backgroundColor: '#E5E7EB',

@@ -16,6 +16,7 @@ import { challengeHasParticipant } from '../utils/challengeGuards';
 import { isRecentEndedChallenge } from '../utils/challengeLifecycle';
 import { formatLocalDate } from '../utils/fineCalculator';
 import { androidTopInsetStyle } from '../utils/androidTopInset';
+import { Ionicons } from '@expo/vector-icons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -41,7 +42,7 @@ export default function HomeScreen() {
   const sections = useMemo((): Section[] => {
     const out: Section[] = [];
     if (activeChallenges.length > 0) {
-      out.push({ title: '진행 중인 챌린지', data: activeChallenges });
+      out.push({ title: '참여중인 챌린지', data: activeChallenges });
     }
     if (recentEndedChallenges.length > 0) {
       out.push({ title: '최근 종료된 챌린지', data: recentEndedChallenges });
@@ -52,7 +53,21 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>챌린지체커</Text>
+        <Text style={styles.headerTitle}>Challenge Checker</Text>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('JoinByCode')}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="key-outline" size={22} color="#9CA3AF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CreateChallenge')}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="add-circle-outline" size={22} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <SectionList
@@ -68,6 +83,8 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <ChallengeCard
             challenge={item}
+            currentUserId={state.currentUser?.id}
+            checkIns={state.checkIns}
             onPress={() =>
               navigation.navigate('ChallengeDetail', { challengeId: item.id })
             }
@@ -75,7 +92,7 @@ export default function HomeScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🏆</Text>
+            <Ionicons name="trophy-outline" size={64} color="#D1D5DB" />
             <Text style={styles.emptyText}>표시할 챌린지가 없어요</Text>
             <Text style={styles.emptySubText}>
               진행 중·종료 후 일주일 이내 챌린이 여기에 나타나요.{'\n'}
@@ -85,20 +102,6 @@ export default function HomeScreen() {
         }
       />
 
-      <View style={styles.fabRow}>
-        <TouchableOpacity
-          style={styles.fabSecondary}
-          onPress={() => navigation.navigate('JoinByCode')}
-        >
-          <Text style={styles.fabSecondaryText}>📨 초대 코드 입력</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate('CreateChallenge')}
-        >
-          <Text style={styles.fabText}>+ 챌린지 만들기</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -109,17 +112,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 22,
     paddingBottom: 16,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '800',
     color: '#1F2937',
   },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  iconBtn: {
+    padding: 6,
+  },
   listContent: {
-    paddingBottom: 112,
+    paddingBottom: 24,
   },
   sectionHeader: {
     paddingHorizontal: 20,
@@ -152,47 +166,5 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
-  },
-  fabRow: {
-    position: 'absolute',
-    bottom: 32,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    gap: 10,
-  },
-  fabSecondary: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  fabSecondaryText: {
-    color: '#4F46E5',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  fab: {
-    backgroundColor: '#4F46E5',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  fabText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });
