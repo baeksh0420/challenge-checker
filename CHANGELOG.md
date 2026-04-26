@@ -2,6 +2,13 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/)를 따르며, 버전은 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [1.2.1] - 2026-04-26
+
+### Fixed
+
+- Android: 다른 사용자 **프로필** 화면에서 스택 헤더와 겹치던 **상단 여백** 제거(`UserProfileScreen`).
+- iOS: 챌린지 **캘린더 컬러** 선택 시 링이 잘리거나 검은 원이 비정상적으로 보이던 현상 수정(`ChallengeDetailScreen` 팔레트).
+
 ## [1.2.0] - 2026-04-26
 
 ### Added

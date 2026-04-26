@@ -734,18 +734,31 @@ export default function ChallengeDetailScreen() {
           <Pressable style={styles.colorCard} onPress={() => {}}>
             <Text style={styles.colorTitle}>내 캘린더 컬러 변경</Text>
             <View style={styles.colorPalette}>
-              {COLOR_PALETTE.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  style={[
-                    styles.colorDot,
-                    { backgroundColor: color },
-                    selectedColor === color && styles.colorDotSelected,
-                  ]}
-                  onPress={() => setSelectedColor(color)}
-                  activeOpacity={0.8}
-                />
-              ))}
+              {COLOR_PALETTE.map((color) => {
+                const selected = selectedColor === color;
+                return (
+                  <TouchableOpacity
+                    key={color}
+                    style={styles.colorDotWrap}
+                    onPress={() => setSelectedColor(color)}
+                    activeOpacity={0.85}
+                    accessibilityState={{ selected }}
+                  >
+                    <View
+                      style={[
+                        styles.colorDotFill,
+                        { backgroundColor: color },
+                      ]}
+                    />
+                    {selected ? (
+                      <View
+                        pointerEvents="none"
+                        style={styles.colorDotRing}
+                      />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
             <View style={styles.colorPreviewRow}>
               <View style={[styles.colorPreviewDot, { backgroundColor: selectedColor }]} />
@@ -1081,15 +1094,28 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
-  colorDot: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  /** iOS에서 scale+border 조합 시 링이 잘리거나 검은 원이 삐져나오는 문제 방지 */
+  colorDotWrap: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  colorDotSelected: {
+  colorDotFill: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  colorDotRing: {
+    position: 'absolute',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 3,
     borderColor: '#1F2937',
-    transform: [{ scale: 1.15 }],
+    backgroundColor: 'transparent',
+    left: 3,
+    top: 3,
   },
   colorPreviewRow: {
     flexDirection: 'row',
