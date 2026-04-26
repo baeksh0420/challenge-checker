@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Modal,
   FlatList,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ import { CheckIn, RootStackParamList, User } from '../types';
 import CalendarView from '../components/CalendarView';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import ParticipantProgress from '../components/ParticipantProgress';
+import ProfileAvatarButton from '../components/ProfileAvatarButton';
 import { challengeHasParticipant, participantIds } from '../utils/challengeGuards';
 import { getChallengeParticipantAccent } from '../utils/participantColor';
 import {
@@ -34,6 +36,16 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'ChallengeDetail'>;
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 상세 표시: 제외 요일을 월→일 순으로 */
+const WEEKDAY_MON_FIRST_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function formatExcludedDaysMonFirst(excluded: number[] | undefined): string {
+  if (!excluded?.length) return '없음';
+  const set = new Set(excluded);
+  const ordered = WEEKDAY_MON_FIRST_ORDER.filter((d) => set.has(d));
+  return ordered.map((d) => DAY_LABELS[d]).join(', ');
+}
 
 /** 캘린더 탭: 참가자 전체 인증 일자 합산·날짜 탭 시 모달에서 모두 조회 */
 const CALENDAR_ALL_PARTICIPANTS = '__calendar_all__';
@@ -57,6 +69,27 @@ export default function ChallengeDetailScreen() {
   const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#4F46E5');
+  const { width: windowWidth } = useWindowDimensions();
+
+  const isParticipant = challenge
+    ? challengeHasParticipant(challenge, state.currentUser?.id)
+    : false;
+  const pushMuted = challenge
+    ? (state.currentUser?.pushMutedChallengeIds ?? []).includes(challenge.id)
+    : false;
+  const isCreator = challenge
+    ? state.currentUser?.id === challenge.creatorId
+    : false;
+
+  const titleNameTextMaxW = useMemo(() => {
+    if (!challenge) return 0;
+    // content paddingHorizontal: 20×2, titleRow: nameRow | 8pt gap | key
+    const hPad = 40;
+    const keySlot = isParticipant ? 8 + 28 + 8 + 28 : 0;
+    const nameRowW = windowWidth - hPad - keySlot;
+      const pencilSlot = isCreator ? 4 + 24 : 0;
+    return Math.max(0, nameRowW - pencilSlot);
+  }, [windowWidth, challenge, isParticipant, isCreator]);
 
   const COLOR_PALETTE = [
     '#EF4444', '#F59E0B', '#10B981', '#3B82F6',
@@ -86,6 +119,22 @@ export default function ChallengeDetailScreen() {
         .map((ci) => ci.date)
     );
   }, [challenge, state.checkIns, selectedUserId]);
+
+  /** 전체 캘린더: 날짜마다 그날 인증한(서로 다른) 참가자 수 */
+  const dateParticipantCounts = useMemo(() => {
+    if (!challenge) return undefined;
+    const byDate: Record<string, Set<string>> = {};
+    for (const ci of state.checkIns) {
+      if (ci.challengeId !== challenge.id) continue;
+      if (!byDate[ci.date]) byDate[ci.date] = new Set();
+      byDate[ci.date]!.add(ci.userId);
+    }
+    const out: Record<string, number> = {};
+    for (const d of Object.keys(byDate)) {
+      out[d] = byDate[d]!.size;
+    }
+    return out;
+  }, [challenge, state.checkIns]);
 
   const dayDetailCheckIns = useMemo(() => {
     if (!challenge || !detailDate) return [];
@@ -126,6 +175,24 @@ export default function ChallengeDetailScreen() {
     return { perfect, fined };
   }, [showEndedResultBlock, challenge, state.checkIns, state.users]);
 
+  const totalFineSum = useMemo(() => {
+    if (!challenge) return 0;
+    return participantIds(challenge).reduce((sum, uid) => {
+      const f = calculateFine(challenge, uid, state.checkIns);
+      return sum + f.totalFine;
+    }, 0);
+  }, [challenge, state.checkIns]);
+
+  const handleCheckInReaction = useCallback(
+    (ci: CheckIn, type: 'thumbsUp' | 'sad') => {
+      const uid = state.currentUser?.id;
+      if (!uid) return;
+      const list = ci.reactions?.[type] ?? [];
+      void actions.toggleCheckInReaction(ci.id, type, list.includes(uid));
+    },
+    [state.currentUser?.id, actions],
+  );
+
   if (!challenge) {
     return (
       <SafeAreaView style={styles.container}>
@@ -135,17 +202,7 @@ export default function ChallengeDetailScreen() {
   }
 
   const participants = participantIds(challenge);
-  const isParticipant = challengeHasParticipant(challenge, state.currentUser?.id);
   const isActive = todayStr >= challenge.startDate && todayStr <= challenge.endDate;
-
-  const totalFineSum = useMemo(() => {
-    return participants.reduce((sum, uid) => {
-      const f = calculateFine(challenge, uid, state.checkIns);
-      return sum + f.totalFine;
-    }, 0);
-  }, [challenge, state.checkIns, participants]);
-
-  const isCreator = state.currentUser?.id === challenge.creatorId;
 
   const hasCheckedInToday = state.checkIns.some(
     (ci) =>
@@ -261,57 +318,109 @@ export default function ChallengeDetailScreen() {
         ) : null}
 
         <View style={styles.titleRow}>
-          <Text style={styles.title}>{challenge.title}</Text>
+          <View style={styles.titleNameRow}>
+            <Text
+              style={[styles.title, { maxWidth: titleNameTextMaxW }]}
+            >
+              {challenge.title}
+            </Text>
+            {isCreator ? (
+              <TouchableOpacity
+                onPress={openCreatorMenu}
+                hitSlop={{ top: 14, bottom: 14, left: 8, right: 8 }}
+              >
+                <Ionicons name="pencil" size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {isParticipant ? (
-            <TouchableOpacity
-              style={styles.titleEditHit}
-              onPress={handleShareInviteCode}
-              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
-            >
-              <Ionicons name="key-outline" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          ) : null}
-          {isCreator ? (
-            <TouchableOpacity
-              style={styles.titleEditHit}
-              onPress={openCreatorMenu}
-              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
-            >
-              <Ionicons name="pencil" size={19} color="#9CA3AF" />
-            </TouchableOpacity>
+            <View style={styles.titleActions}>
+              <TouchableOpacity
+                style={styles.titleHeaderIconHit}
+                onPress={handleShareInviteCode}
+                hitSlop={{ top: 14, bottom: 14, left: 10, right: 6 }}
+              >
+                <Ionicons name="key-outline" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.titleHeaderIconHit}
+                onPress={() => {
+                  void actions.setChallengePushMuted(challenge.id, !pushMuted);
+                }}
+                hitSlop={{ top: 14, bottom: 14, left: 6, right: 10 }}
+                accessibilityLabel={
+                  pushMuted ? '이 챌린지 인증 알림 켜기' : '이 챌린지 인증 알림 끄기'
+                }
+              >
+                <Ionicons
+                  name={pushMuted ? 'notifications-off-outline' : 'notifications-outline'}
+                  size={20}
+                  color="#9CA3AF"
+                />
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
-        {challenge.description ? <Text style={styles.description}>{challenge.description}</Text> : null}
+        {challenge.description ? (
+          <Text style={styles.description} selectable>
+            {challenge.description}
+          </Text>
+        ) : null}
 
         <View style={styles.infoBoxRow}>
           <View style={styles.infoCard}>
-            <Text style={styles.infoCardValue}>
-              {challenge.startDate.slice(5)} ~ {challenge.endDate.slice(5)}
-            </Text>
-            <Text style={styles.infoCardLabel}>기간</Text>
-          </View>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoCardValue}>
-              {totalFineSum.toLocaleString()}원
-            </Text>
-            <Text style={styles.infoCardLabel}>누적 벌금</Text>
-          </View>
-          <View style={styles.infoCard}>
-            {challenge.fineMode === 'daily' ? (
-              <>
-                <Text style={styles.infoCardValue}>
-                  {challenge.excludedDays?.length > 0
-                    ? challenge.excludedDays.map((d: number) => DAY_LABELS[d]).join(', ')
-                    : '없음'}
+            <View style={styles.infoTitleSlot}>
+              <Text style={styles.infoCardLabel}>기간</Text>
+            </View>
+            <View style={styles.infoValueSlot}>
+              <View style={styles.infoCardPeriod}>
+                <Text
+                  style={styles.infoCardValue}
+                  selectable
+                >
+                  {challenge.startDate.slice(5)}
                 </Text>
-                <Text style={styles.infoCardLabel}>제외 요일</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.infoCardValue}>{challenge.requiredDaysPerWeek}회</Text>
-                <Text style={styles.infoCardLabel}>주당 필수</Text>
-              </>
-            )}
+                <View style={styles.infoCardTildeRow}>
+                  <Text style={styles.infoCardTilde} selectable>
+                    -
+                  </Text>
+                </View>
+                <Text
+                  style={styles.infoCardValue}
+                  selectable
+                >
+                  {challenge.endDate.slice(5)}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoTitleSlot}>
+              <Text style={styles.infoCardLabel}>누적 벌금</Text>
+            </View>
+            <View style={styles.infoValueSlot}>
+              <Text style={styles.infoCardValueFine}>
+                {totalFineSum.toLocaleString()}원
+              </Text>
+            </View>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoTitleSlot}>
+              <Text style={styles.infoCardLabel}>
+                {challenge.fineMode === 'daily' ? '제외 요일' : '주당 필수'}
+              </Text>
+            </View>
+            <View style={styles.infoValueSlot}>
+              {challenge.fineMode === 'daily' ? (
+                <Text style={styles.infoCardValue}>
+                  {formatExcludedDaysMonFirst(challenge.excludedDays)}
+                </Text>
+              ) : (
+                <Text style={styles.infoCardValue}>
+                  {challenge.requiredDaysPerWeek}회
+                </Text>
+              )}
+            </View>
           </View>
         </View>
 
@@ -355,8 +464,11 @@ export default function ChallengeDetailScreen() {
                 style={[styles.userTab, styles.myTab, isSelected && { backgroundColor: tabAccent }]}
                 onPress={() => setSelectedUserId(myUid)}
               >
-                <Text style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}>
-                  내 캘린더
+                <Text
+                  style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}
+                  numberOfLines={1}
+                >
+                  {state.currentUser?.name?.trim() || '내 캘린더'}
                 </Text>
               </TouchableOpacity>
             );
@@ -409,6 +521,11 @@ export default function ChallengeDetailScreen() {
           challengeStart={challenge.startDate}
           challengeEnd={challenge.endDate}
           accentColor={accent}
+          dateParticipantCounts={
+            selectedUserId === CALENDAR_ALL_PARTICIPANTS
+              ? dateParticipantCounts
+              : undefined
+          }
           onPressCheckedDate={(dateStr) => setDetailDate(dateStr)}
           onPressUncheckedInRangeDate={
             selectedUserId === CALENDAR_ALL_PARTICIPANTS
@@ -496,14 +613,41 @@ export default function ChallengeDetailScreen() {
                 renderItem={({ item: ci }) => {
                   const author = getUser(ci.userId);
                   const isMine = ci.userId === state.currentUser?.id;
+                  const uid = state.currentUser?.id;
+                  const thumbs = ci.reactions?.thumbsUp ?? [];
+                  const rainy = ci.reactions?.sad ?? [];
+                  const myThumbs = uid ? thumbs.includes(uid) : false;
+                  const myRainy = uid ? rainy.includes(uid) : false;
                   return (
                     <View style={styles.feedItem}>
                       <View style={styles.feedItemHeader}>
+                        <ProfileAvatarButton
+                          user={author}
+                          userId={ci.userId}
+                          size={36}
+                          initialBackgroundColor={getChallengeParticipantAccent(
+                            challenge,
+                            state.users,
+                            ci.userId
+                          )}
+                          style={{ marginRight: 8, marginTop: 0 }}
+                          beforeNavigate={() => setDetailDate(null)}
+                        />
                         <View style={styles.feedItemHeaderText}>
-                          <Text style={styles.feedAuthor}>
+                          <Text
+                            style={[
+                              styles.feedAuthor,
+                              author
+                                ? { color: getChallengeParticipantAccent(challenge, state.users, ci.userId) }
+                                : null,
+                            ]}
+                            selectable
+                          >
                             {author?.name ?? '알 수 없음'}
                           </Text>
-                          <Text style={styles.feedMeta}>{ci.date}</Text>
+                          <Text style={styles.feedMeta} selectable>
+                            {ci.date}
+                          </Text>
                         </View>
                         {isMine ? (
                           <View style={styles.feedItemActions}>
@@ -538,7 +682,9 @@ export default function ChallengeDetailScreen() {
                         ) : null}
                       </View>
                       {ci.type === 'text' ? (
-                        <Text style={styles.feedText}>{String(ci.content ?? '')}</Text>
+                        <Text style={styles.feedText} selectable>
+                          {String(ci.content ?? '')}
+                        </Text>
                       ) : (
                         <>
                           <TouchableOpacity
@@ -549,17 +695,71 @@ export default function ChallengeDetailScreen() {
                             <Image
                               source={{ uri: ci.content }}
                               style={styles.feedImage}
-                              contentFit="cover"
+                              contentFit="contain"
                               cachePolicy="memory-disk"
                               recyclingKey={ci.id}
                               transition={150}
                             />
                           </TouchableOpacity>
                           {ci.textNote ? (
-                            <Text style={styles.feedText}>{ci.textNote}</Text>
+                            <Text style={styles.feedPhotoNote} selectable>
+                              {ci.textNote}
+                            </Text>
                           ) : null}
                         </>
                       )}
+                      {uid ? (
+                        <View style={styles.feedReactionRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.feedReactionBtn,
+                              myThumbs && styles.feedReactionBtnActive,
+                            ]}
+                            onPress={() => handleCheckInReaction(ci, 'thumbsUp')}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons
+                              name={myThumbs ? 'thumbs-up' : 'thumbs-up-outline'}
+                              size={18}
+                              color={myThumbs ? '#4F46E5' : '#9CA3AF'}
+                            />
+                            {thumbs.length > 0 ? (
+                              <Text
+                                style={[
+                                  styles.feedReactionCount,
+                                  myThumbs && styles.feedReactionCountActive,
+                                ]}
+                              >
+                                {thumbs.length}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.feedReactionBtn,
+                              myRainy && styles.feedReactionBtnActive,
+                            ]}
+                            onPress={() => handleCheckInReaction(ci, 'sad')}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons
+                              name={myRainy ? 'rainy' : 'rainy-outline'}
+                              size={18}
+                              color={myRainy ? '#4F46E5' : '#9CA3AF'}
+                            />
+                            {rainy.length > 0 ? (
+                              <Text
+                                style={[
+                                  styles.feedReactionCount,
+                                  myRainy && styles.feedReactionCountActive,
+                                ]}
+                              >
+                                {rainy.length}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
                     </View>
                   );
                 }}
@@ -715,17 +915,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 8,
-    gap: 6,
+    gap: 8,
+  },
+  titleNameRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   title: {
-    flex: 1,
     fontSize: 24,
     fontWeight: '800',
     color: '#1F2937',
   },
-  titleEditHit: {
+  titleActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingTop: 4,
-    paddingLeft: 2,
+    flexShrink: 0,
+  },
+  /** 열쇠·알림 아이콘 동일 박스에 중앙 정렬해 한 줄로 맞춤 */
+  titleHeaderIconHit: {
+    flexShrink: 0,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   description: {
     fontSize: 15,
@@ -735,28 +953,65 @@ const styles = StyleSheet.create({
   },
   infoBoxRow: {
     flexDirection: 'row',
+    alignItems: 'stretch',
     gap: 10,
     marginBottom: 20,
   },
   infoCard: {
     flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    flexDirection: 'column',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 12,
+  },
+  infoTitleSlot: {
+    width: '100%',
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    marginBottom: 0,
+  },
+  infoValueSlot: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 64,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   infoCardValue: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#1F2937',
+    textAlign: 'center',
+  },
+  infoCardValueFine: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#DC2626',
     textAlign: 'center',
   },
   infoCardLabel: {
     fontSize: 11,
     color: '#9CA3AF',
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  infoCardPeriod: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 2,
+  },
+  infoCardTildeRow: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  infoCardTilde: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
   },
   weeklyFineHint: {
     fontSize: 12,
@@ -979,7 +1234,7 @@ const styles = StyleSheet.create({
   },
   feedItemHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
@@ -1018,11 +1273,47 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
+  feedPhotoNote: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginTop: 8,
+    marginBottom: 8,
+  },
   feedImage: {
     width: '100%',
-    height: 180,
+    aspectRatio: 1,
     borderRadius: 12,
     marginTop: 8,
     backgroundColor: '#F3F4F6',
+  },
+  feedReactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+    gap: 8,
+  },
+  feedReactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    gap: 4,
+  },
+  feedReactionBtnActive: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  feedReactionCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  feedReactionCountActive: {
+    color: '#4F46E5',
   },
 });

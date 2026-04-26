@@ -2,11 +2,20 @@ import React, { useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider, useAppContext } from './src/store/AppContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 function AppContent() {
-  const { state } = useAppContext();
+  const { state, dispatch } = useAppContext();
+
+  useEffect(() => {
+    if (!state.authLoading) return;
+    const timer = setTimeout(() => {
+      dispatch({ type: 'SET_AUTH_LOADING', payload: false });
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [state.authLoading, dispatch]);
 
   if (state.authLoading) {
     return (
@@ -42,8 +51,10 @@ export default function App() {
 
   return (
     <AppProvider>
-      <StatusBar style="dark" />
-      <AppContent />
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <AppContent />
+      </SafeAreaProvider>
     </AppProvider>
   );
 }

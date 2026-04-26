@@ -56,6 +56,7 @@ export default function ChallengeCard({
   const isDaily = challenge.fineMode === 'daily';
   let flameActive = false;
   let weeklyLabel: string | null = null;
+  const todayExcluded = isDaily && (challenge.excludedDays ?? []).includes(now.getDay());
 
   if (isActive && currentUserId) {
     if (isDaily) {
@@ -81,16 +82,24 @@ export default function ChallengeCard({
             {isDaily ? '매일' : `주${challenge.requiredDaysPerWeek}회`}
           </Text>
         </View>
-        <Text style={[styles.title, done && styles.titleDone]} numberOfLines={hideStatusBadge ? 2 : 1}>
+        <Text
+          style={[styles.title, done && styles.titleDone]}
+          numberOfLines={hideStatusBadge ? 2 : 1}
+          selectable
+        >
           {challenge.title}
         </Text>
         {!hideStatusBadge && isActive ? (
           <View style={styles.flameWrap}>
-            <Ionicons
-              name={flameActive ? 'flame' : 'flame-outline'}
-              size={20}
-              color={flameActive ? '#F97316' : '#D1D5DB'}
-            />
+            {todayExcluded ? (
+              <Ionicons name="leaf" size={20} color="#10B981" />
+            ) : (
+              <Ionicons
+                name={flameActive ? 'flame' : 'flame-outline'}
+                size={20}
+                color={flameActive ? '#F97316' : '#D1D5DB'}
+              />
+            )}
             {weeklyLabel ? (
               <Text style={[styles.weeklyLabel, flameActive && styles.weeklyLabelActive]}>
                 {weeklyLabel}
@@ -107,7 +116,11 @@ export default function ChallengeCard({
       </View>
 
       {!hideDescription && challenge.description ? (
-        <Text style={[styles.description, done && styles.descriptionDone]} numberOfLines={2}>
+        <Text
+          style={[styles.description, done && styles.descriptionDone]}
+          numberOfLines={2}
+          selectable
+        >
           {challenge.description}
         </Text>
       ) : null}

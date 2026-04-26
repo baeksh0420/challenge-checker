@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   Alert,
   Platform,
   Modal,
@@ -18,6 +17,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList, CheckIn } from '../types';
 import { formatDate } from '../utils/fineCalculator';
+import KeyboardAwareScrollView from '../components/KeyboardAwareScrollView';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 
 type Route = RouteProp<RootStackParamList, 'CheckIn'>;
@@ -152,6 +152,8 @@ export default function CheckInScreen() {
       content,
       ...(type === 'photo' && captionTrim ? { textNote: captionTrim } : {}),
       createdAt: new Date().toISOString(),
+      /** 같은 날 기존 인증 교체(수정)면 참가자 푸시 없음 */
+      skipParticipantPush: !!existingCheckIn,
     };
 
     setSubmitting(true);
@@ -184,7 +186,7 @@ export default function CheckInScreen() {
           </View>
         </View>
       </Modal>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
         <Text style={styles.screenTitle}>챌린지 인증</Text>
         <Text style={styles.dateText}>인증일: {checkInDate}</Text>
 
@@ -236,10 +238,10 @@ export default function CheckInScreen() {
               value={textContent}
               onChangeText={setTextContent}
               multiline
-              maxLength={500}
+              maxLength={2000}
               editable={!submitting}
             />
-            <Text style={styles.charCount}>{textContent.length}/500</Text>
+            <Text style={styles.charCount}>{textContent.length}/2000</Text>
           </View>
         ) : (
           <View style={styles.photoSection}>
@@ -285,10 +287,10 @@ export default function CheckInScreen() {
                 value={photoCaption}
                 onChangeText={setPhotoCaption}
                 multiline
-                maxLength={500}
+                maxLength={50}
                 editable={!submitting}
               />
-              <Text style={styles.charCount}>{photoCaption.length}/500</Text>
+              <Text style={styles.charCount}>{photoCaption.length}/50</Text>
             </View>
           </View>
         )}
@@ -308,7 +310,7 @@ export default function CheckInScreen() {
         >
           <Text style={styles.cancelBtnText}>취소</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <ImagePreviewModal
         visible={!!photoPreviewUri}
@@ -388,6 +390,7 @@ const styles = StyleSheet.create({
   },
   textArea: {
     minHeight: 150,
+    maxHeight: 250,
     textAlignVertical: 'top',
   },
   charCount: {
@@ -411,6 +414,7 @@ const styles = StyleSheet.create({
   },
   photoCaptionInput: {
     minHeight: 100,
+    maxHeight: 180,
     textAlignVertical: 'top',
   },
   photoButtons: {

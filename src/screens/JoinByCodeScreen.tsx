@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList } from '../types';
+import KeyboardAwareScrollView from '../components/KeyboardAwareScrollView';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -76,7 +77,7 @@ export default function JoinByCodeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>초대 코드로 참여</Text>
         <Text style={styles.subtitle}>
           챌린지 참여자에게 받은 6자리 코드를 입력하세요
@@ -109,7 +110,7 @@ export default function JoinByCodeScreen() {
         >
           <Text style={styles.cancelBtnText}>취소</Text>
         </TouchableOpacity>
-      </View>
+      </KeyboardAwareScrollView>
 
       <Modal
         visible={colorPickerVisible}
@@ -162,7 +163,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 72,
     paddingBottom: 32,

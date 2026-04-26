@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -16,13 +17,18 @@ import ChallengeDetailScreen from '../screens/ChallengeDetailScreen';
 import ChallengeBoardScreen from '../screens/ChallengeBoardScreen';
 import CheckInScreen from '../screens/CheckInScreen';
 import JoinByCodeScreen from '../screens/JoinByCodeScreen';
-import AllMyChallengesScreen from '../screens/AllMyChallengesScreen';
-import MyCheckInHistoryScreen from '../screens/MyCheckInHistoryScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+  const barPadTop = 6;
+  const barPadBottom = 2 + insets.bottom;
+  // 탭 아이콘+라벨 + 위·아래 + iPhone 홈 인디케이터(safe area)
+  const tabBarHeight = 44 + barPadTop + barPadBottom;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -32,9 +38,9 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#F3F4F6',
-          paddingBottom: 12,
-          paddingTop: 10,
-          height: 68,
+          paddingTop: barPadTop,
+          paddingBottom: barPadBottom,
+          height: tabBarHeight,
         },
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
@@ -124,14 +130,9 @@ export default function AppNavigator() {
             options={{ title: '초대 코드 입력' }}
           />
           <Stack.Screen
-            name="AllMyChallenges"
-            component={AllMyChallengesScreen}
-            options={{ title: '내 챌린지 전체' }}
-          />
-          <Stack.Screen
-            name="MyCheckInHistory"
-            component={MyCheckInHistoryScreen}
-            options={{ title: '내 인증내역' }}
+            name="UserProfile"
+            component={UserProfileScreen}
+            options={{ title: '프로필' }}
           />
         </Stack.Navigator>
       ) : (

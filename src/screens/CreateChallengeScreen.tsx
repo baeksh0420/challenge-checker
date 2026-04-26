@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   Alert,
   Platform,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList, Challenge } from '../types';
 import { formatDate } from '../utils/fineCalculator';
+import KeyboardAwareScrollView from '../components/KeyboardAwareScrollView';
 import DatePickerModal from '../components/DatePickerModal';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -129,7 +129,7 @@ export default function CreateChallengeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
         <Text style={styles.screenTitle}>
           {editChallengeId ? '챌린지 수정' : '새 챌린지 만들기'}
         </Text>
@@ -204,156 +204,160 @@ export default function CreateChallengeScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>벌금 모드</Text>
-          <View style={styles.toggleRow}>
-            <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                fineMode === 'weekly' && styles.toggleBtnActive,
-              ]}
-              onPress={() => setFineMode('weekly')}
-            >
-              <Text
+          <View style={styles.fineModeBox}>
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
                 style={[
-                  styles.toggleBtnText,
-                  fineMode === 'weekly' && styles.toggleBtnTextActive,
+                  styles.toggleBtn,
+                  fineMode === 'weekly' && styles.toggleBtnActive,
                 ]}
+                onPress={() => setFineMode('weekly')}
               >
-                주당 벌금
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                fineMode === 'daily' && styles.toggleBtnActive,
-              ]}
-              onPress={() => setFineMode('daily')}
-            >
-              <Text
+                <Text
+                  style={[
+                    styles.toggleBtnText,
+                    fineMode === 'weekly' && styles.toggleBtnTextActive,
+                  ]}
+                >
+                  주당 벌금
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[
-                  styles.toggleBtnText,
-                  fineMode === 'daily' && styles.toggleBtnTextActive,
+                  styles.toggleBtn,
+                  fineMode === 'daily' && styles.toggleBtnActive,
                 ]}
+                onPress={() => setFineMode('daily')}
               >
-                일당 벌금
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.modeHint}>
-            {fineMode === 'weekly'
-              ? '주당: 집계 주간은 월요일~일요일(기기 로컬 시간) 기준입니다.'
-              : '일당: 제외하지 않은 요일에 인증하지 않으면 벌금이 적용됩니다.'}
-          </Text>
-        </View>
+                <Text
+                  style={[
+                    styles.toggleBtnText,
+                    fineMode === 'daily' && styles.toggleBtnTextActive,
+                  ]}
+                >
+                  일당 벌금
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modeHint}>
+              {fineMode === 'weekly'
+                ? '주당: 집계 주간은 월요일~일요일(기기 로컬 시간) 기준입니다.'
+                : '일당: 제외하지 않은 요일에 인증하지 않으면 벌금이 적용됩니다.'}
+            </Text>
 
-        {fineMode === 'weekly' ? (
-          <>
-            <View style={styles.field}>
-              <Text style={styles.label}>주당 필수 횟수 (이번 주 목표)</Text>
+            {fineMode === 'weekly' ? (
+              <>
+                <View style={styles.boxField}>
+                  <Text style={styles.label}>주당 필수 횟수 (이번 주 목표)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={requiredDays}
+                    onChangeText={setRequiredDays}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                  />
+                </View>
+                <View style={styles.boxField}>
+                  <Text style={styles.label}>주당 벌금 방식</Text>
+                  <View style={styles.toggleRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleBtn,
+                        weeklyFineRule === 'flat' && styles.toggleBtnActive,
+                      ]}
+                      onPress={() => setWeeklyFineRule('flat')}
+                    >
+                      <Text
+                        style={[
+                          styles.toggleBtnText,
+                          weeklyFineRule === 'flat' && styles.toggleBtnTextActive,
+                        ]}
+                      >
+                        주 1회
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleBtn,
+                        weeklyFineRule === 'perShortfall' && styles.toggleBtnActive,
+                      ]}
+                      onPress={() => setWeeklyFineRule('perShortfall')}
+                    >
+                      <Text
+                        style={[
+                          styles.toggleBtnText,
+                          weeklyFineRule === 'perShortfall' &&
+                            styles.toggleBtnTextActive,
+                        ]}
+                      >
+                        부족 횟수당
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.modeHint}>
+                    {weeklyFineRule === 'flat'
+                      ? '한 주에 한 번이라도 목표에 못 미치면, 그 주 벌금이 1회 적용됩니다.'
+                      : '마감된 각 주마다 (목표 − 실제 인증 일수)만큼 벌금이 곱해집니다.'}
+                  </Text>
+                </View>
+              </>
+            ) : null}
+
+            {fineMode === 'daily' ? (
+              <View style={styles.boxField}>
+                <Text style={styles.label}>
+                  제외 요일 (선택한 요일은 벌금 없음)
+                </Text>
+                <View style={styles.dayRow}>
+                  {['일', '월', '화', '수', '목', '금', '토'].map((label, idx) => {
+                    const isExcluded = excludedDays.includes(idx);
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[
+                          styles.dayBtn,
+                          isExcluded && styles.dayBtnActive,
+                        ]}
+                        onPress={() => {
+                          setExcludedDays((prev) =>
+                            prev.includes(idx)
+                              ? prev.filter((d) => d !== idx)
+                              : [...prev, idx]
+                          );
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.dayBtnText,
+                            isExcluded && styles.dayBtnTextActive,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.boxFieldLast}>
+              <Text style={styles.label}>
+                {fineMode === 'weekly'
+                  ? weeklyFineRule === 'flat'
+                    ? '미달 시 주당 벌금 (원, 주당 1회)'
+                    : '미달 1회당 벌금 (원, 부족 횟수만큼 누적)'
+                  : '미달성 시 일당 벌금 (원)'}
+              </Text>
               <TextInput
                 style={styles.input}
-                value={requiredDays}
-                onChangeText={setRequiredDays}
+                value={fineAmount}
+                onChangeText={setFineAmount}
                 keyboardType="number-pad"
-                maxLength={1}
+                maxLength={7}
               />
             </View>
-            <View style={styles.field}>
-              <Text style={styles.label}>주당 벌금 방식</Text>
-              <View style={styles.toggleRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleBtn,
-                    weeklyFineRule === 'flat' && styles.toggleBtnActive,
-                  ]}
-                  onPress={() => setWeeklyFineRule('flat')}
-                >
-                  <Text
-                    style={[
-                      styles.toggleBtnText,
-                      weeklyFineRule === 'flat' && styles.toggleBtnTextActive,
-                    ]}
-                  >
-                    주 1회
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleBtn,
-                    weeklyFineRule === 'perShortfall' && styles.toggleBtnActive,
-                  ]}
-                  onPress={() => setWeeklyFineRule('perShortfall')}
-                >
-                  <Text
-                    style={[
-                      styles.toggleBtnText,
-                      weeklyFineRule === 'perShortfall' &&
-                        styles.toggleBtnTextActive,
-                    ]}
-                  >
-                    부족 횟수당
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.modeHint}>
-                {weeklyFineRule === 'flat'
-                  ? '한 주에 한 번이라도 목표에 못 미치면, 그 주 벌금이 1회 적용됩니다.'
-                  : '마감된 각 주마다 (목표 − 실제 인증 일수)만큼 벌금이 곱해집니다.'}
-              </Text>
-            </View>
-          </>
-        ) : null}
-
-        {fineMode === 'daily' ? (
-          <View style={styles.field}>
-            <Text style={styles.label}>제외 요일 (선택한 요일은 벌금 없음)</Text>
-            <View style={styles.dayRow}>
-              {['일', '월', '화', '수', '목', '금', '토'].map((label, idx) => {
-                const isExcluded = excludedDays.includes(idx);
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.dayBtn,
-                      isExcluded && styles.dayBtnActive,
-                    ]}
-                    onPress={() => {
-                      setExcludedDays((prev) =>
-                        prev.includes(idx)
-                          ? prev.filter((d) => d !== idx)
-                          : [...prev, idx]
-                      );
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dayBtnText,
-                        isExcluded && styles.dayBtnTextActive,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
           </View>
-        ) : null}
-
-        <View style={styles.field}>
-          <Text style={styles.label}>
-            {fineMode === 'weekly'
-              ? weeklyFineRule === 'flat'
-                ? '미달 시 주당 벌금 (원, 주당 1회)'
-                : '미달 1회당 벌금 (원, 부족 횟수만큼 누적)'
-              : '미달성 시 일당 벌금 (원)'}
-          </Text>
-          <TextInput
-            style={styles.input}
-            value={fineAmount}
-            onChangeText={setFineAmount}
-            keyboardType="number-pad"
-            maxLength={7}
-          />
         </View>
 
         <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
@@ -368,7 +372,7 @@ export default function CreateChallengeScreen() {
         >
           <Text style={styles.cancelBtnText}>취소</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -429,6 +433,7 @@ const styles = StyleSheet.create({
   },
   textArea: {
     minHeight: 80,
+    maxHeight: 180,
     textAlignVertical: 'top',
   },
   createBtn: {
@@ -474,6 +479,21 @@ const styles = StyleSheet.create({
   },
   toggleBtnTextActive: {
     color: '#FFFFFF',
+  },
+  fineModeBox: {
+    marginTop: 6,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  boxField: {
+    marginTop: 16,
+  },
+  boxFieldLast: {
+    marginTop: 16,
+    marginBottom: 0,
   },
   modeHint: {
     fontSize: 12,

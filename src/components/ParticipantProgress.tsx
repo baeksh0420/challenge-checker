@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
-import { Image } from 'expo-image';
 import { useAppContext } from '../store/AppContext';
+import ProfileAvatarButton from './ProfileAvatarButton';
 import { Challenge, User } from '../types';
 import { calculateFine, getWeeklyFineRule } from '../utils/fineCalculator';
 import { participantIds } from '../utils/challengeGuards';
@@ -9,6 +9,7 @@ import {
   getDailyProgressSegments,
   getWeeklyProgressSegments,
   segmentBarColor,
+  segmentCurrentFocusPendingColor,
 } from '../utils/participantProgressSegments';
 import { getChallengeParticipantAccent } from '../utils/participantColor';
 
@@ -35,7 +36,7 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
         ? getDailyProgressSegments(challenge, userId, state.checkIns, now)
         : getWeeklyProgressSegments(challenge, userId, state.checkIns, now);
 
-    const completeCount = segments.filter((s) => s === 'complete').length;
+    const completeCount = segments.filter((s) => s.state === 'complete').length;
     const totalSeg = segments.length;
     const unit = fineMode === 'daily' ? '일' : '주';
     const progressLabel =
@@ -43,47 +44,48 @@ export default function ParticipantProgress({ challenge }: ParticipantProgressPr
 
     return (
       <View style={styles.participantRow}>
-        {user.photoURL ? (
-          <Image
-            source={{ uri: user.photoURL }}
-            style={styles.avatarImg}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            recyclingKey={user.id}
-            transition={100}
-          />
-        ) : (
-          <View style={[styles.avatar, { backgroundColor: accentColor }]}>
-            <Text style={styles.avatarText}>{user.name[0]}</Text>
-          </View>
-        )}
+        <ProfileAvatarButton
+          user={user}
+          userId={userId}
+          size={40}
+          initialBackgroundColor={accentColor}
+          style={{ marginRight: 12 }}
+        />
         <View style={styles.info}>
           <View style={styles.nameRow}>
-            <Text style={styles.name}>{user.name}</Text>
+            <Text style={styles.name} selectable>
+              {user.name}
+            </Text>
             <Text style={[styles.checkInCount, { color: accentColor }]}>
               {progressLabel}
             </Text>
           </View>
           {totalSeg > 0 ? (
             <View style={styles.progressBarRow}>
-              {segments.map((seg, i) => (
-                <View
-                  key={`${userId}-${i}`}
-                  style={[
-                    styles.progressSegmentWrap,
-                    i < segments.length - 1 && styles.progressSegmentWrapGap,
-                  ]}
-                >
+              {segments.map((seg, i) => {
+                const { state, isCurrentFocus } = seg;
+                const baseColor = segmentBarColor(state, accentColor);
+                const fillColor =
+                  isCurrentFocus && state === 'pending'
+                    ? segmentCurrentFocusPendingColor(accentColor)
+                    : baseColor;
+                return (
                   <View
+                    key={`${userId}-${i}`}
                     style={[
-                      styles.progressSegmentInner,
-                      {
-                        backgroundColor: segmentBarColor(seg, accentColor),
-                      },
+                      styles.progressSegmentWrap,
+                      i < segments.length - 1 && styles.progressSegmentWrapGap,
                     ]}
-                  />
-                </View>
-              ))}
+                  >
+                    <View
+                      style={[
+                        styles.progressSegmentInner,
+                        { backgroundColor: fillColor },
+                      ]}
+                    />
+                  </View>
+                );
+              })}
             </View>
           ) : (
             <View style={styles.progressBarBg}>
@@ -138,26 +140,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarImg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    backgroundColor: '#E5E7EB',
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
   info: {
     flex: 1,
   },
@@ -178,23 +160,25 @@ const styles = StyleSheet.create({
   },
   progressBarRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    height: 10,
+    alignItems: 'center',
+    height: 12,
     borderRadius: 4,
-    overflow: 'hidden',
     backgroundColor: '#F3F4F6',
+    paddingVertical: 1,
   },
   progressSegmentWrap: {
     flex: 1,
-    minWidth: 2,
+    minWidth: 0,
+    minHeight: 8,
+    justifyContent: 'center',
   },
   progressSegmentWrapGap: {
     marginRight: 2,
   },
   progressSegmentInner: {
-    flex: 1,
-    minHeight: 10,
+    height: 8,
     borderRadius: 2,
+    alignSelf: 'stretch',
   },
   progressBarBg: {
     height: 6,

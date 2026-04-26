@@ -8,6 +8,8 @@ export interface User {
   avatarColor: string;
   /** 프로필 사진(Firebase Storage URL) */
   photoURL?: string;
+  /** 인증 푸시를 끈 챌린지 id 목록 */
+  pushMutedChallengeIds?: string[];
 }
 
 export interface Challenge {
@@ -42,6 +44,8 @@ export interface CheckIn {
   date: string; // ISO date string (YYYY-MM-DD)
   type: 'photo' | 'text';
   content: string; // 텍스트 내용 또는 이미지 URI
+  /** true면 참가자에게 인증 푸시를 보내지 않음(같은 날 수정·교체 시) */
+  skipParticipantPush?: boolean;
   /** 사진 인증(type: photo)에 함께 남기는 글(선택) */
   textNote?: string;
   createdAt: string;
@@ -67,8 +71,6 @@ export type RootStackParamList = {
   /** `date` 미지정 시 오늘(로컬) */
   CheckIn: { challengeId: string; date?: string };
   JoinByCode: undefined;
-  /** 참여한 모든 챌린지(진행·예정·종료) */
-  AllMyChallenges: undefined;
-  /** 내 인증 전체 기록 */
-  MyCheckInHistory: undefined;
+  /** 다른 참가자 프로필(읽기 전용) */
+  UserProfile: { userId: string };
 };

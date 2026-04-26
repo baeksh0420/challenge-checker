@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList } from '../types';
 import ImagePreviewModal from '../components/ImagePreviewModal';
+import ProfileAvatarButton from '../components/ProfileAvatarButton';
+import { getChallengeParticipantAccent } from '../utils/participantColor';
 
 type Route = RouteProp<RootStackParamList, 'ChallengeBoard'>;
 
@@ -73,18 +75,36 @@ export default function ChallengeBoardScreen() {
           return (
             <View style={styles.card}>
               <View style={styles.cardHead}>
-                <Text style={styles.author}>{author?.name ?? '알 수 없음'}</Text>
-                <Text style={styles.dateLine}>
-                  {ci.date} ·{' '}
-                  {ci.type === 'photo'
-                    ? ci.textNote
-                      ? '사진 + 글'
-                      : '사진'
-                    : '텍스트'}
-                </Text>
+                {challenge ? (
+                  <ProfileAvatarButton
+                    user={author}
+                    userId={ci.userId}
+                    size={36}
+                    initialBackgroundColor={getChallengeParticipantAccent(
+                      challenge,
+                      state.users,
+                      ci.userId
+                    )}
+                  />
+                ) : null}
+                <View style={styles.cardHeadText}>
+                  <Text style={styles.author} selectable>
+                    {author?.name ?? '알 수 없음'}
+                  </Text>
+                  <Text style={styles.dateLine} selectable>
+                    {ci.date} ·{' '}
+                    {ci.type === 'photo'
+                      ? ci.textNote
+                        ? '사진 + 글'
+                        : '사진'
+                      : '텍스트'}
+                  </Text>
+                </View>
               </View>
               {ci.type === 'text' ? (
-                <Text style={styles.body}>{String(ci.content ?? '')}</Text>
+                <Text style={styles.body} selectable>
+                  {String(ci.content ?? '')}
+                </Text>
               ) : (
                 <>
                   <TouchableOpacity
@@ -102,7 +122,9 @@ export default function ChallengeBoardScreen() {
                     />
                   </TouchableOpacity>
                   {ci.textNote ? (
-                    <Text style={[styles.body, styles.photoNote]}>{ci.textNote}</Text>
+                    <Text style={[styles.body, styles.photoNote]} selectable>
+                      {ci.textNote}
+                    </Text>
                   ) : null}
                 </>
               )}
@@ -132,9 +154,18 @@ export default function ChallengeBoardScreen() {
                   onPress={() => handleReaction(ci, 'sad')}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name={mySad ? 'sad' : 'sad-outline'} size={16} color={mySad ? '#4F46E5' : '#9CA3AF'} />
+                  <Ionicons
+                    name={mySad ? 'rainy' : 'rainy-outline'}
+                    size={16}
+                    color={mySad ? '#4F46E5' : '#9CA3AF'}
+                  />
                   {sadList.length > 0 ? (
-                    <Text style={[styles.reactionCount, mySad && styles.reactionCountActive]}>
+                    <Text
+                      style={[
+                        styles.reactionCount,
+                        mySad && styles.reactionCountActive,
+                      ]}
+                    >
                       {sadList.length}
                     </Text>
                   ) : null}
@@ -194,6 +225,13 @@ const styles = StyleSheet.create({
   },
   cardHead: {
     marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardHeadText: {
+    flex: 1,
+    minWidth: 0,
   },
   author: {
     fontSize: 15,

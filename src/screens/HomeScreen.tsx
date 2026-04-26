@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,9 +24,33 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type Section = { title: string; data: Challenge[] };
 
+/** 버그·기능 제보 메일 받는 주소 */
+const FEEDBACK_EMAIL = 'baeksh.0420@gmail.com';
+
 export default function HomeScreen() {
   const { state } = useAppContext();
   const navigation = useNavigation<Nav>();
+
+  const openFeedbackMail = useCallback(async () => {
+    const subject = encodeURIComponent('[챌린지체커] 버그·기능 제보');
+    const body = encodeURIComponent(
+      [
+        '(제보 내용을 적어 주세요. 스크린샷이 있으면 첨부해 주세요.)',
+        '',
+        '────────',
+        `로그인 이메일: ${state.currentUser?.email ?? '-'}`,
+      ].join('\n'),
+    );
+    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        '메일을 열 수 없습니다',
+        '기기에 메일 앱이 설정되어 있는지 확인해 주세요.',
+      );
+    }
+  }, [state.currentUser?.email]);
 
   const { activeChallenges, recentEndedChallenges } = useMemo(() => {
     const now = new Date();
@@ -96,8 +122,25 @@ export default function HomeScreen() {
             <Text style={styles.emptyText}>표시할 챌린지가 없어요</Text>
             <Text style={styles.emptySubText}>
               진행 중·종료 후 일주일 이내 챌린이 여기에 나타나요.{'\n'}
-              그 외는 프로필의「전체 챌린지」에서 볼 수 있어요.
+              그 외는 프로필 탭의「나의 챌린지」에서 볼 수 있어요.
             </Text>
+          </View>
+        }
+        ListFooterComponent={
+          <View style={styles.feedbackFooter}>
+            <TouchableOpacity
+              style={styles.feedbackBtn}
+              onPress={() => void openFeedbackMail()}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="버그 및 기능 제보"
+            >
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={22}
+                color="#6B7280"
+              />
+            </TouchableOpacity>
           </View>
         }
       />
@@ -115,14 +158,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1F2937',
+    flexShrink: 1,
+    marginRight: 8,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: 0.2,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -133,7 +179,24 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 16,
+    flexGrow: 1,
+  },
+  feedbackFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 32,
+    alignItems: 'flex-end',
+  },
+  feedbackBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionHeader: {
     paddingHorizontal: 20,

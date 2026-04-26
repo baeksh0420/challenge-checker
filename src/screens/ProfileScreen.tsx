@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,66 +6,102 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   Platform,
   Alert,
   ActivityIndicator,
   Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
-import { formatLocalDate } from '../utils/fineCalculator';
-import { MainTabParamList, RootStackParamList } from '../types';
-import { challengeHasParticipant } from '../utils/challengeGuards';
 import { androidTopInsetStyle } from '../utils/androidTopInset';
 import ImagePreviewModal from '../components/ImagePreviewModal';
+import ProfileMyChallengesTab from './profile/ProfileMyChallengesTab';
+import ProfileResultSummaryTab from './profile/ProfileResultSummaryTab';
 
-/** 프로필은 탭 + 상위 스택(상세·전체목록 등) 모두 사용 */
-type ProfileNav = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'Profile'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
+type ProfileTab = 'challenges' | 'summary';
+
+function mapUpdateEmailError(code?: string): string {
+  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+    return '현재 비밀번호가 올바르지 않습니다.';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return '이미 다른 계정에서 사용 중인 이메일입니다.';
+  }
+  if (code === 'auth/invalid-email') return '올바른 이메일 형식이 아닙니다.';
+  if (code === 'auth/requires-recent-login') {
+    return '보안을 위해 다시 로그인한 뒤 시도해 주세요.';
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return '이메일 변경이 허용되지 않았습니다.';
+  }
+  return '이메일을 변경하지 못했습니다. 다시 시도해 주세요.';
+}
 
 export default function ProfileScreen() {
   const { state, actions } = useAppContext();
-  const navigation = useNavigation<ProfileNav>();
   const [name, setName] = useState(state.currentUser?.name ?? '');
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState(state.currentUser?.email ?? '');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
+  const [tab, setTab] = useState<ProfileTab>('challenges');
 
   useEffect(() => {
     setName(state.currentUser?.name ?? '');
   }, [state.currentUser?.id, state.currentUser?.name]);
 
-  const myChallenges = useMemo(
-    () =>
-      state.challenges.filter((c) =>
-        challengeHasParticipant(c, state.currentUser?.id)
-      ),
-    [state.challenges, state.currentUser?.id]
-  );
-  const myCheckIns = useMemo(
-    () =>
-      state.checkIns.filter((ci) => ci.userId === state.currentUser?.id),
-    [state.checkIns, state.currentUser?.id]
-  );
-
-  const totalCheckIns = myCheckIns.length;
-  const activeChallenges = myChallenges.filter((c) => {
-    const todayStr = formatLocalDate(new Date());
-    return todayStr >= c.startDate && todayStr <= c.endDate;
-  }).length;
+  useEffect(() => {
+    setEmailDraft(state.currentUser?.email ?? '');
+  }, [state.currentUser?.id, state.currentUser?.email]);
 
   const handleSaveName = async () => {
     if (name.trim()) {
       await actions.updateUserName(name.trim());
     }
     setIsEditing(false);
+  };
+
+  const cancelEmailEdit = () => {
+    setIsEditingEmail(false);
+    setEmailPassword('');
+    setEmailDraft(state.currentUser?.email ?? '');
+  };
+
+  const handleSaveEmail = async () => {
+    const next = emailDraft.trim().toLowerCase();
+    if (!next) {
+      Alert.alert('이메일', '이메일 주소를 입력해 주세요.');
+      return;
+    }
+    if (!emailPassword) {
+      Alert.alert('이메일 변경', '본인 확인을 위해 현재 비밀번호를 입력해 주세요.');
+      return;
+    }
+    if (next === (state.currentUser?.email ?? '').toLowerCase()) {
+      Alert.alert('이메일 변경', '현재와 동일한 이메일입니다.');
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      await actions.updateUserEmail(next, emailPassword);
+      setIsEditingEmail(false);
+      setEmailPassword('');
+      Alert.alert(
+        '완료',
+        '이메일이 변경되었습니다. 다음 로그인부터는 새 이메일(아이디)을 사용하세요.',
+      );
+    } catch (e) {
+      const err = e as { code?: string };
+      Alert.alert('이메일 변경 실패', mapUpdateEmailError(err.code));
+    } finally {
+      setEmailBusy(false);
+    }
   };
 
   const openPhotoPicker = async () => {
@@ -109,118 +145,257 @@ export default function ProfileScreen() {
       <Modal visible={photoBusy} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.loadingBackdrop}>
           <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color="#4F46E5" />
+            <ActivityIndicator size="large" color="#2563EB" />
             <Text style={styles.loadingText}>
               사진을 최적화하고 업로드하는 중…
             </Text>
           </View>
         </View>
       </Modal>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View>
-          <Text style={styles.headerTitle}>프로필</Text>
-
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <View style={styles.flex}>
           <View style={styles.profileCard}>
-            <TouchableOpacity
-              style={styles.avatarWrap}
-              onPress={handleAvatarPress}
-              disabled={photoBusy}
-              activeOpacity={0.85}
-            >
-              <View style={styles.avatarInner}>
-                {state.currentUser?.photoURL ? (
-                  <Image
-                    source={{ uri: state.currentUser.photoURL }}
-                    style={styles.avatarImage}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={state.currentUser.id}
-                    transition={120}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.avatar,
-                      { backgroundColor: state.currentUser?.avatarColor ?? '#9CA3AF' },
-                    ]}
-                  >
-                    <Text style={styles.avatarText}>
-                      {state.currentUser?.name?.[0] ?? '?'}
-                    </Text>
-                  </View>
-                )}
-                {photoBusy ? (
-                  <View style={styles.avatarBusy}>
-                    <ActivityIndicator color="#FFFFFF" />
-                  </View>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.photoHint}>
-            {state.currentUser?.photoURL ? '탭하여 크게 보기 · 변경' : '프로필 사진 탭하여 변경'}
-          </Text>
-
-            {isEditing ? (
-              <View style={styles.editRow}>
-                <TextInput
-                  style={styles.nameInput}
-                  value={name}
-                  onChangeText={setName}
-                  autoFocus
-                  maxLength={20}
-                />
-                <TouchableOpacity
-                  style={[styles.saveBtn, { marginLeft: 8 }]}
-                  onPress={handleSaveName}
-                >
-                  <Text style={styles.saveBtnText}>저장</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity onPress={() => setIsEditing(true)}>
-                <Text style={styles.userName}>{state.currentUser?.name ?? ''}</Text>
-                <Text style={styles.editHint}>탭하여 이름 변경</Text>
+            <View style={styles.profileRow}>
+              <TouchableOpacity
+                style={[styles.avatarWrap, styles.avatarAlignSelf]}
+                onPress={handleAvatarPress}
+                disabled={photoBusy}
+                activeOpacity={0.85}
+              >
+                <View style={styles.avatarInner}>
+                  {state.currentUser?.photoURL ? (
+                    <Image
+                      source={{ uri: state.currentUser.photoURL }}
+                      style={styles.avatarImage}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      recyclingKey={state.currentUser.id}
+                      transition={120}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.avatar,
+                        {
+                          backgroundColor:
+                            state.currentUser?.avatarColor ?? '#9CA3AF',
+                        },
+                      ]}
+                    >
+                      <Text style={styles.avatarText}>
+                        {state.currentUser?.name?.[0] ?? '?'}
+                      </Text>
+                    </View>
+                  )}
+                  {photoBusy ? (
+                    <View style={styles.avatarBusy}>
+                      <ActivityIndicator color="#FFFFFF" />
+                    </View>
+                  ) : null}
+                </View>
               </TouchableOpacity>
+
+              <View style={styles.profileInfoCol}>
+                <View style={styles.profileNameBlock}>
+                  {isEditing ? (
+                    <View style={styles.editRow}>
+                      <TextInput
+                        style={styles.nameInput}
+                        value={name}
+                        onChangeText={setName}
+                        autoFocus
+                        maxLength={20}
+                      />
+                      <TouchableOpacity
+                        style={[styles.saveBtn, { marginLeft: 8 }]}
+                        onPress={handleSaveName}
+                      >
+                        <Text style={styles.saveBtnText}>저장</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.nameDisplayRow}>
+                      <Text
+                        style={styles.userName}
+                        selectable
+                        numberOfLines={2}
+                      >
+                        {state.currentUser?.name ?? ''}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setIsEditingEmail(false);
+                          setIsEditing(true);
+                        }}
+                        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="이름 변경"
+                      >
+                        <Ionicons name="pencil" size={13} color="#9CA3AF" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <View style={styles.emailSection}>
+                    <Text style={styles.emailSectionLabel}>이메일 (아이디)</Text>
+                    {isEditingEmail ? (
+                      <View style={styles.emailEditBlock}>
+                        <TextInput
+                          style={styles.emailInput}
+                          value={emailDraft}
+                          onChangeText={setEmailDraft}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          autoComplete="email"
+                          placeholder="새 이메일"
+                          placeholderTextColor="#9CA3AF"
+                          editable={!emailBusy}
+                        />
+                        <TextInput
+                          style={styles.emailInput}
+                          value={emailPassword}
+                          onChangeText={setEmailPassword}
+                          secureTextEntry
+                          autoCapitalize="none"
+                          placeholder="현재 비밀번호"
+                          placeholderTextColor="#9CA3AF"
+                          editable={!emailBusy}
+                        />
+                        <Text style={styles.emailHint}>
+                          변경 후에는 새 이메일로 로그인합니다.
+                        </Text>
+                        <View style={styles.emailEditActions}>
+                          <TouchableOpacity
+                            style={styles.secondaryBtn}
+                            onPress={cancelEmailEdit}
+                            disabled={emailBusy}
+                          >
+                            <Text style={styles.secondaryBtnText}>취소</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.saveBtn,
+                              emailBusy && styles.btnDisabled,
+                            ]}
+                            onPress={() => void handleSaveEmail()}
+                            disabled={emailBusy}
+                          >
+                            {emailBusy ? (
+                              <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                              <Text style={styles.saveBtnText}>저장</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.emailDisplayRow}>
+                        <Text
+                          style={styles.userEmail}
+                          selectable
+                          numberOfLines={2}
+                        >
+                          {state.currentUser?.email ?? ''}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setIsEditing(false);
+                            setEmailDraft(state.currentUser?.email ?? '');
+                            setEmailPassword('');
+                            setIsEditingEmail(true);
+                          }}
+                          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                          activeOpacity={0.7}
+                          accessibilityLabel="이메일 변경"
+                        >
+                          <Ionicons name="pencil" size={13} color="#9CA3AF" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.logoutBar}>
+              <TouchableOpacity
+                style={styles.logoutBarBtn}
+                onPress={() => {
+                  Alert.alert('로그아웃', '정말 로그아웃할까요?', [
+                    { text: '취소', style: 'cancel' },
+                    {
+                      text: '로그아웃',
+                      style: 'destructive',
+                      onPress: () => {
+                        void actions.signOut();
+                      },
+                    },
+                  ]);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="로그아웃"
+              >
+                <Text style={styles.logoutBarText}>로그아웃</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={styles.tabHit}
+              onPress={() => setTab('challenges')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.tabLabel,
+                  tab === 'challenges' && styles.tabLabelActive,
+                ]}
+              >
+                나의 챌린지
+              </Text>
+              {tab === 'challenges' ? (
+                <View style={styles.tabUnderline} />
+              ) : (
+                <View style={styles.tabUnderlinePlaceholder} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.tabHit}
+              onPress={() => setTab('summary')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.tabLabel,
+                  tab === 'summary' && styles.tabLabelActive,
+                ]}
+              >
+                결과 요약
+              </Text>
+              {tab === 'summary' ? (
+                <View style={styles.tabUnderline} />
+              ) : (
+                <View style={styles.tabUnderlinePlaceholder} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.tabPanel}>
+            {tab === 'challenges' ? (
+              <ProfileMyChallengesTab />
+            ) : (
+              <ProfileResultSummaryTab />
             )}
           </View>
-
-          <View style={styles.statsRow}>
-            <TouchableOpacity
-              style={styles.statBox}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('AllMyChallenges')}
-            >
-              <Text style={styles.statNumber}>{myChallenges.length}</Text>
-              <Text style={styles.statLabel}>전체 챌린지</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.statBox}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Text style={styles.statNumber}>{activeChallenges}</Text>
-              <Text style={styles.statLabel}>진행 중</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.statBox}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('MyCheckInHistory')}
-            >
-              <Text style={styles.statNumber}>{totalCheckIns}</Text>
-              <Text style={styles.statLabel}>내 인증내역</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={() => {
-              void actions.signOut();
-            }}
-          >
-            <Text style={styles.logoutBtnText}>로그아웃</Text>
-          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
       <ImagePreviewModal
         visible={photoPreviewVisible}
         imageUri={state.currentUser?.photoURL}
@@ -231,30 +406,28 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 28,
-    paddingBottom: 56,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1F2937',
-    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
   },
   profileCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F3F4F6',
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  avatarAlignSelf: {
+    alignSelf: 'flex-start',
   },
   avatarWrap: {
-    marginBottom: 4,
+    marginRight: 14,
   },
   avatarInner: {
     width: 72,
@@ -281,6 +454,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  profileInfoCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileNameBlock: {
+    flexShrink: 0,
+  },
+  logoutBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 12,
+    marginTop: 4,
+  },
+  logoutBarBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  logoutBarText: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
   loadingBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -303,10 +500,12 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
   },
-  photoHint: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 12,
+  nameDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    gap: 6,
+    maxWidth: '100%',
   },
   avatarText: {
     color: '#FFFFFF',
@@ -316,18 +515,15 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  editHint: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 2,
+    color: '#111827',
+    flexShrink: 1,
+    lineHeight: 26,
+    includeFontPadding: false,
   },
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   nameInput: {
     backgroundColor: '#F3F4F6',
@@ -335,12 +531,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 10 : 6,
     fontSize: 16,
-    color: '#1F2937',
+    color: '#111827',
     minWidth: 120,
-    textAlign: 'center',
+    flex: 1,
+    maxWidth: '100%',
   },
   saveBtn: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -350,40 +547,109 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  statsRow: {
+  btnDisabled: {
+    opacity: 0.6,
+  },
+  emailSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+  },
+  emailSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  emailDisplayRow: {
     flexDirection: 'row',
-    marginBottom: 24,
-    marginHorizontal: -6,
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '100%',
   },
-  statBox: {
+  userEmail: {
     flex: 1,
-    marginHorizontal: 6,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
-    alignItems: 'center',
+    flexShrink: 1,
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    includeFontPadding: false,
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#4F46E5',
-    marginBottom: 4,
+  emailEditBlock: {
+    gap: 8,
   },
-  statLabel: {
+  emailInput: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: 15,
+    color: '#111827',
+  },
+  emailHint: {
     fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
+    color: '#9CA3AF',
+    lineHeight: 17,
   },
-  logoutBtn: {
-    marginTop: 8,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    paddingVertical: 14,
+  emailEditActions: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
   },
-  logoutBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  secondaryBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 8,
+  },
+  tabHit: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 0,
+  },
+  tabLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    paddingBottom: 10,
+  },
+  tabLabelActive: {
+    color: '#111827',
     fontWeight: '700',
+  },
+  tabUnderline: {
+    height: 3,
+    width: '100%',
+    backgroundColor: '#111827',
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  tabUnderlinePlaceholder: {
+    height: 3,
+    width: '100%',
+    backgroundColor: 'transparent',
+  },
+  tabPanel: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 16,
   },
 });

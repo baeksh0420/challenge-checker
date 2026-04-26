@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  addDoc,
   updateDoc,
   getDocs,
   getDoc,
@@ -31,12 +30,16 @@ function normalizeUserDoc(data: Record<string, unknown>, id: string): User {
     typeof data.photoURL === 'string' && data.photoURL.length > 0
       ? data.photoURL
       : undefined;
+  const pushMutedChallengeIds = Array.isArray(data.pushMutedChallengeIds)
+    ? (data.pushMutedChallengeIds as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
   return {
     id,
     email: typeof data.email === 'string' ? data.email : '',
     name: typeof data.name === 'string' ? data.name : '사용자',
     avatarColor: typeof data.avatarColor === 'string' ? data.avatarColor : '#6B7280',
     ...(photoURL ? { photoURL } : {}),
+    pushMutedChallengeIds,
   };
 }
 
@@ -59,6 +62,25 @@ export async function updateUserProfile(
   fields: { email?: string; name?: string; photoURL?: string | null }
 ): Promise<void> {
   await updateDoc(doc(db, USERS, userId), fields);
+}
+
+/** Expo 푸시 토큰·타임존(조용한 시간·요약용) */
+export async function updateUserPushProvisioning(
+  userId: string,
+  fields: { expoPushToken?: string | null; pushTimeZone?: string }
+): Promise<void> {
+  await updateDoc(doc(db, USERS, userId), fields);
+}
+
+/** 챌린지별 인증 푸시 끄기/켜기 */
+export async function setUserChallengePushMuted(
+  userId: string,
+  challengeId: string,
+  muted: boolean
+): Promise<void> {
+  await updateDoc(doc(db, USERS, userId), {
+    pushMutedChallengeIds: muted ? arrayUnion(challengeId) : arrayRemove(challengeId),
+  });
 }
 
 function uriToBlob(uri: string): Promise<Blob> {
