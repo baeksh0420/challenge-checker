@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,22 +16,50 @@ import { Challenge, RootStackParamList } from '../types';
 import ChallengeCard from '../components/ChallengeCard';
 import { challengeHasParticipant } from '../utils/challengeGuards';
 import { isRecentEndedChallenge } from '../utils/challengeLifecycle';
+import { formatLocalDate } from '../utils/fineCalculator';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
+import { Ionicons } from '@expo/vector-icons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type Section = { title: string; data: Challenge[] };
 
+/** 버그·기능 제보 메일 받는 주소 */
+const FEEDBACK_EMAIL = 'baeksh.0420@gmail.com';
+
 export default function HomeScreen() {
   const { state } = useAppContext();
   const navigation = useNavigation<Nav>();
 
+  const openFeedbackMail = useCallback(async () => {
+    const subject = encodeURIComponent('[챌린지체커] 버그·기능 제보');
+    const body = encodeURIComponent(
+      [
+        '(제보 내용을 적어 주세요. 스크린샷이 있으면 첨부해 주세요.)',
+        '',
+        '────────',
+        `로그인 이메일: ${state.currentUser?.email ?? '-'}`,
+      ].join('\n'),
+    );
+    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        '메일을 열 수 없습니다',
+        '기기에 메일 앱이 설정되어 있는지 확인해 주세요.',
+      );
+    }
+  }, [state.currentUser?.email]);
+
   const { activeChallenges, recentEndedChallenges } = useMemo(() => {
     const now = new Date();
+    const todayStr = formatLocalDate(now);
     const my = state.challenges.filter((c) =>
       challengeHasParticipant(c, state.currentUser?.id)
     );
     const active = my.filter(
-      (c) => now >= new Date(c.startDate) && now <= new Date(c.endDate)
+      (c) => todayStr >= c.startDate && todayStr <= c.endDate
     );
     const recent = my.filter((c) => isRecentEndedChallenge(c, now));
     return { activeChallenges: active, recentEndedChallenges: recent };
@@ -38,7 +68,7 @@ export default function HomeScreen() {
   const sections = useMemo((): Section[] => {
     const out: Section[] = [];
     if (activeChallenges.length > 0) {
-      out.push({ title: '진행 중인 챌린지', data: activeChallenges });
+      out.push({ title: '참여중인 챌린지', data: activeChallenges });
     }
     if (recentEndedChallenges.length > 0) {
       out.push({ title: '최근 종료된 챌린지', data: recentEndedChallenges });
@@ -47,9 +77,23 @@ export default function HomeScreen() {
   }, [activeChallenges, recentEndedChallenges]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
       <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>챌린지체커</Text>
+        <Text style={styles.headerTitle}>Challenge Checker</Text>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('JoinByCode')}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="key-outline" size={22} color="#9CA3AF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CreateChallenge')}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="add-circle-outline" size={22} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <SectionList
@@ -65,6 +109,8 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <ChallengeCard
             challenge={item}
+            currentUserId={state.currentUser?.id}
+            checkIns={state.checkIns}
             onPress={() =>
               navigation.navigate('ChallengeDetail', { challengeId: item.id })
             }
@@ -72,30 +118,33 @@ export default function HomeScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🏆</Text>
+            <Ionicons name="trophy-outline" size={64} color="#D1D5DB" />
             <Text style={styles.emptyText}>표시할 챌린지가 없어요</Text>
             <Text style={styles.emptySubText}>
               진행 중·종료 후 일주일 이내 챌린이 여기에 나타나요.{'\n'}
-              그 외는 프로필의「전체 챌린지」에서 볼 수 있어요.
+              그 외는 프로필 탭의「나의 챌린지」에서 볼 수 있어요.
             </Text>
+          </View>
+        }
+        ListFooterComponent={
+          <View style={styles.feedbackFooter}>
+            <TouchableOpacity
+              style={styles.feedbackBtn}
+              onPress={() => void openFeedbackMail()}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="버그 및 기능 제보"
+            >
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={22}
+                color="#6B7280"
+              />
+            </TouchableOpacity>
           </View>
         }
       />
 
-      <View style={styles.fabRow}>
-        <TouchableOpacity
-          style={styles.fabSecondary}
-          onPress={() => navigation.navigate('JoinByCode')}
-        >
-          <Text style={styles.fabSecondaryText}>📨 초대 코드 입력</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate('CreateChallenge')}
-        >
-          <Text style={styles.fabText}>+ 챌린지 만들기</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -106,17 +155,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   headerBar: {
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1F2937',
+    flexShrink: 1,
+    marginRight: 8,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: 0.2,
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  iconBtn: {
+    padding: 6,
   },
   listContent: {
-    paddingBottom: 112,
+    paddingBottom: 16,
+    flexGrow: 1,
+  },
+  feedbackFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 32,
+    alignItems: 'flex-end',
+  },
+  feedbackBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionHeader: {
     paddingHorizontal: 20,
@@ -149,47 +229,5 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
-  },
-  fabRow: {
-    position: 'absolute',
-    bottom: 32,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    gap: 10,
-  },
-  fabSecondary: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  fabSecondaryText: {
-    color: '#4F46E5',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  fab: {
-    backgroundColor: '#4F46E5',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  fabText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

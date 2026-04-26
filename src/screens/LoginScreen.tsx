@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
 import {
   Alert,
-  View,
+  Image,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
 import { useAppContext } from '../store/AppContext';
+import { androidTopInsetStyle } from '../utils/androidTopInset';
+import KeyboardAwareScrollView from '../components/KeyboardAwareScrollView';
 
 function mapAuthError(message: string, code?: string): string {
   const c = code ?? '';
@@ -27,8 +26,22 @@ function mapAuthError(message: string, code?: string): string {
   return '오류가 발생했습니다. 다시 시도해 주세요.';
 }
 
+function mapPasswordResetError(code?: string): string {
+  const c = code ?? '';
+  if (c === 'auth/invalid-email') return '올바른 이메일 형식이 아닙니다.';
+  if (c === 'auth/missing-email') return '이메일 주소를 입력해 주세요.';
+  if (c === 'auth/user-not-found') {
+    return '해당 이메일로 가입된 계정이 없을 수 있습니다. 입력을 확인해 주세요.';
+  }
+  if (c === 'auth/too-many-requests') return '시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+  if (c === 'auth/network-request-failed') {
+    return '네트워크 오류입니다. 연결을 확인해 주세요.';
+  }
+  return '메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 export default function LoginScreen() {
-  const { actions } = useAppContext();
+  const { actions, state } = useAppContext();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,20 +86,19 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.keyboard}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
+      <KeyboardAwareScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <Text style={styles.emoji}>🏆</Text>
-          <Text style={styles.title}>챌린지체커</Text>
+          <Image
+            source={require('../../assets/login-mark.png')}
+            style={styles.loginMark}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="Challenge Checker"
+          />
+          <Text style={styles.title}>Challenge Checker</Text>
           <Text style={styles.subtitle}>
             이메일과 비밀번호로{'\n'}
             {isSignUp ? '새 계정을 만드세요' : '로그인하세요'}
@@ -148,6 +160,40 @@ export default function LoginScreen() {
             <Text style={styles.fieldError}>비밀번호가 서로 일치하지 않습니다.</Text>
           ) : null}
 
+          {!isSignUp ? (
+            <TouchableOpacity
+              style={styles.forgotPasswordBtn}
+              onPress={async () => {
+                if (!trimmedEmail) {
+                  Alert.alert(
+                    '비밀번호 찾기',
+                    '가입하신 이메일 주소를 위 입력란에 적은 뒤 다시 눌러 주세요.',
+                  );
+                  return;
+                }
+                setBusy(true);
+                try {
+                  await actions.requestPasswordResetEmail(trimmedEmail);
+                  Alert.alert(
+                    '메일 발송',
+                    `${trimmedEmail} 로 비밀번호 재설정 안내 메일을 보냈습니다.\n메일함(스팸함 포함)을 확인해 주세요.`,
+                  );
+                } catch (e: unknown) {
+                  const err = e as { code?: string };
+                  Alert.alert(
+                    '비밀번호 찾기',
+                    mapPasswordResetError(err.code),
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              disabled={busy}
+            >
+              <Text style={styles.forgotPasswordText}>비밀번호 찾기</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <TouchableOpacity
             style={[styles.primaryBtn, (!canSubmit || busy) && styles.btnDisabled]}
             onPress={handleSubmit}
@@ -175,12 +221,15 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          <Text style={styles.hint}>
-            비밀번호는 Firebase Authentication에만 저장되며,Firestore에는 이메일·프로필만
-            저장됩니다.
-          </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {state.authError ? (
+            <Text style={styles.authError}>{state.authError}</Text>
+          ) : (
+            <Text style={styles.hint}>
+              비밀번호는 Firebase Authentication에만 저장되며,Firestore에는 이메일·프로필만
+              저장됩니다.
+            </Text>
+          )}
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -190,19 +239,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  keyboard: {
-    flex: 1,
-  },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 32,
     paddingTop: 36,
     paddingBottom: 64,
   },
-  emoji: {
-    fontSize: 64,
+  loginMark: {
+    width: 88,
+    height: 88,
+    alignSelf: 'center',
     marginBottom: 16,
-    textAlign: 'center',
   },
   title: {
     fontSize: 28,
@@ -228,6 +275,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
     marginBottom: 12,
+  },
+  forgotPasswordBtn: {
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+    marginTop: -4,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: '#4F46E5',
+    fontWeight: '600',
   },
   primaryBtn: {
     backgroundColor: '#4F46E5',
@@ -266,5 +325,12 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginBottom: 4,
     marginTop: -4,
+  },
+  authError: {
+    marginTop: 24,
+    fontSize: 13,
+    color: '#EF4444',
+    lineHeight: 18,
+    textAlign: 'center',
   },
 });

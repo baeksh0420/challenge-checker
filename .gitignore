@@ -10,3 +10,5 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
+functions/node_modules/
+functions/lib/

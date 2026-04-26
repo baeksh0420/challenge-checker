@@ -3,7 +3,7 @@
     "name": "챌린지체커",
     "slug": "challenge-checker",
     "scheme": "challengechecker",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,9 +16,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.soh.challengechecker",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -27,13 +28,14 @@
         "backgroundColor": "#4F46E5"
       },
       "package": "com.soh.challengechecker",
-      "versionCode": 1,
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA"
       ]
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.2.0",
     "updates": {
       "url": "https://u.expo.dev/8acecbba-814d-4747-92c0-f4fc385a1e5e",
       "checkAutomatically": "NEVER",
@@ -43,7 +45,16 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "챌린지 인증을 위해 사진 접근 권한이 필요합니다."
+          "photosPermission": "챌린지 인증을 위해 사진 접근 권한이 필요합니다.",
+          "cameraPermission": "챌린지 인증을 위해 카메라 접근 권한이 필요합니다."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#4F46E5",
+          "defaultChannel": "default"
         }
       ]
     ],

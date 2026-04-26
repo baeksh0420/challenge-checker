@@ -1,6 +1,6 @@
 {
   "name": "challenge-checker",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -9,7 +9,9 @@
     "web": "expo start --web",
     "build:apk": "eas build --platform android --profile preview-apk",
     "update:preview": "eas update --channel preview",
-    "update:production": "eas update --channel production"
+    "update:production": "eas update --channel production",
+    "lint": "eslint src/",
+    "test": "jest"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
@@ -18,12 +20,16 @@
     "@react-navigation/bottom-tabs": "^7.0.0",
     "@react-navigation/native": "^7.0.0",
     "@react-navigation/native-stack": "^7.0.0",
+    "buffer": "^6.0.3",
     "expo": "~52.0.0",
     "expo-asset": "~11.0.5",
+    "expo-device": "~7.0.3",
+    "expo-file-system": "~18.0.12",
     "expo-font": "~13.0.4",
     "expo-image": "~2.0.7",
     "expo-image-manipulator": "~13.0.6",
     "expo-image-picker": "~16.0.6",
+    "expo-notifications": "~0.29.14",
     "expo-status-bar": "~2.0.0",
     "expo-updates": "~0.27.5",
     "firebase": "^11.0.0",
@@ -38,8 +44,17 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@types/jest": "^30.0.0",
     "@types/react": "~18.3.0",
     "@types/uuid": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jest": "^29.7.0",
+    "jest-expo": "^55.0.16",
+    "ts-jest": "^29.4.9",
     "typescript": "~5.3.0"
   },
   "overrides": {

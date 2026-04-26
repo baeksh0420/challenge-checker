@@ -1,9 +1,20 @@
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { useRoute, RouteProp } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList } from '../types';
+import ImagePreviewModal from '../components/ImagePreviewModal';
+import ProfileAvatarButton from '../components/ProfileAvatarButton';
+import { getChallengeParticipantAccent } from '../utils/participantColor';
 
 type Route = RouteProp<RootStackParamList, 'ChallengeBoard'>;
 
@@ -14,10 +25,12 @@ function parseCreatedAt(ci: CheckIn): number {
 
 export default function ChallengeBoardScreen() {
   const route = useRoute<Route>();
-  const { state } = useAppContext();
+  const { state, actions } = useAppContext();
   const challengeId = route.params.challengeId;
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
 
   const challenge = state.challenges.find((c) => c.id === challengeId);
+  const myId = state.currentUser?.id;
 
   const items = useMemo(() => {
     return state.checkIns
@@ -26,6 +39,13 @@ export default function ChallengeBoardScreen() {
   }, [state.checkIns, challengeId]);
 
   const getUser = (userId: string) => state.users.find((u) => u.id === userId);
+
+  const handleReaction = (ci: CheckIn, type: 'thumbsUp' | 'sad') => {
+    if (!myId) return;
+    const list = ci.reactions?.[type] ?? [];
+    const hasReacted = list.includes(myId);
+    void actions.toggleCheckInReaction(ci.id, type, hasReacted);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -47,29 +67,118 @@ export default function ChallengeBoardScreen() {
         }
         renderItem={({ item: ci }) => {
           const author = getUser(ci.userId);
+          const thumbsUpList = ci.reactions?.thumbsUp ?? [];
+          const sadList = ci.reactions?.sad ?? [];
+          const myThumbsUp = myId ? thumbsUpList.includes(myId) : false;
+          const mySad = myId ? sadList.includes(myId) : false;
+
           return (
             <View style={styles.card}>
               <View style={styles.cardHead}>
-                <Text style={styles.author}>{author?.name ?? '알 수 없음'}</Text>
-                <Text style={styles.dateLine}>
-                  {ci.date} · {ci.type === 'photo' ? '사진' : '텍스트'}
-                </Text>
+                {challenge ? (
+                  <ProfileAvatarButton
+                    user={author}
+                    userId={ci.userId}
+                    size={36}
+                    initialBackgroundColor={getChallengeParticipantAccent(
+                      challenge,
+                      state.users,
+                      ci.userId
+                    )}
+                  />
+                ) : null}
+                <View style={styles.cardHeadText}>
+                  <Text style={styles.author} selectable>
+                    {author?.name ?? '알 수 없음'}
+                  </Text>
+                  <Text style={styles.dateLine} selectable>
+                    {ci.date} ·{' '}
+                    {ci.type === 'photo'
+                      ? ci.textNote
+                        ? '사진 + 글'
+                        : '사진'
+                      : '텍스트'}
+                  </Text>
+                </View>
               </View>
               {ci.type === 'text' ? (
-                <Text style={styles.body}>{String(ci.content ?? '')}</Text>
+                <Text style={styles.body} selectable>
+                  {String(ci.content ?? '')}
+                </Text>
               ) : (
-                <Image
-                  source={{ uri: ci.content }}
-                  style={styles.photo}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  recyclingKey={ci.id}
-                  transition={150}
-                />
+                <>
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => setPhotoPreviewUri(ci.content)}
+                    accessibilityLabel="사진 크게 보기"
+                  >
+                    <Image
+                      source={{ uri: ci.content }}
+                      style={styles.photo}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      recyclingKey={ci.id}
+                      transition={150}
+                    />
+                  </TouchableOpacity>
+                  {ci.textNote ? (
+                    <Text style={[styles.body, styles.photoNote]} selectable>
+                      {ci.textNote}
+                    </Text>
+                  ) : null}
+                </>
               )}
+
+              <View style={styles.reactionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.reactionBtn,
+                    myThumbsUp && styles.reactionBtnActive,
+                  ]}
+                  onPress={() => handleReaction(ci, 'thumbsUp')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={myThumbsUp ? 'thumbs-up' : 'thumbs-up-outline'} size={16} color={myThumbsUp ? '#4F46E5' : '#9CA3AF'} />
+                  {thumbsUpList.length > 0 ? (
+                    <Text style={[styles.reactionCount, myThumbsUp && styles.reactionCountActive]}>
+                      {thumbsUpList.length}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.reactionBtn,
+                    mySad && styles.reactionBtnActive,
+                  ]}
+                  onPress={() => handleReaction(ci, 'sad')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={mySad ? 'rainy' : 'rainy-outline'}
+                    size={16}
+                    color={mySad ? '#4F46E5' : '#9CA3AF'}
+                  />
+                  {sadList.length > 0 ? (
+                    <Text
+                      style={[
+                        styles.reactionCount,
+                        mySad && styles.reactionCountActive,
+                      ]}
+                    >
+                      {sadList.length}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              </View>
             </View>
           );
         }}
+      />
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
       />
     </SafeAreaView>
   );
@@ -116,6 +225,13 @@ const styles = StyleSheet.create({
   },
   cardHead: {
     marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardHeadText: {
+    flex: 1,
+    minWidth: 0,
   },
   author: {
     fontSize: 15,
@@ -137,5 +253,35 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
+  },
+  photoNote: {
+    marginTop: 10,
+  },
+  reactionRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  reactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    gap: 4,
+  },
+  reactionBtnActive: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  reactionCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  reactionCountActive: {
+    color: '#4F46E5',
   },
 });

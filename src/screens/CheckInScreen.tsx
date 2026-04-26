@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   Alert,
   Platform,
   Modal,
@@ -18,6 +17,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList, CheckIn } from '../types';
 import { formatDate } from '../utils/fineCalculator';
+import KeyboardAwareScrollView from '../components/KeyboardAwareScrollView';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 
 type Route = RouteProp<RootStackParamList, 'CheckIn'>;
 
@@ -28,7 +29,9 @@ export default function CheckInScreen() {
 
   const [type, setType] = useState<'text' | 'photo'>('text');
   const [textContent, setTextContent] = useState('');
+  const [photoCaption, setPhotoCaption] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const checkInDate = route.params.date ?? formatDate(new Date());
@@ -128,6 +131,7 @@ export default function CheckInScreen() {
 
     let localUri: string | undefined;
     let content = type === 'text' ? textContent.trim() : '';
+    const captionTrim = photoCaption.trim();
     if (type === 'photo' && imageUri) {
       const isRemote = /^https?:\/\//i.test(imageUri);
       if (isRemote) {
@@ -146,7 +150,10 @@ export default function CheckInScreen() {
       date: checkInDate,
       type,
       content,
+      ...(type === 'photo' && captionTrim ? { textNote: captionTrim } : {}),
       createdAt: new Date().toISOString(),
+      /** 같은 날 기존 인증 교체(수정)면 참가자 푸시 없음 */
+      skipParticipantPush: !!existingCheckIn,
     };
 
     setSubmitting(true);
@@ -179,7 +186,7 @@ export default function CheckInScreen() {
           </View>
         </View>
       </Modal>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
         <Text style={styles.screenTitle}>챌린지 인증</Text>
         <Text style={styles.dateText}>인증일: {checkInDate}</Text>
 
@@ -231,21 +238,27 @@ export default function CheckInScreen() {
               value={textContent}
               onChangeText={setTextContent}
               multiline
-              maxLength={500}
+              maxLength={2000}
               editable={!submitting}
             />
-            <Text style={styles.charCount}>{textContent.length}/500</Text>
+            <Text style={styles.charCount}>{textContent.length}/2000</Text>
           </View>
         ) : (
           <View style={styles.photoSection}>
             {imageUri ? (
               <View style={styles.imagePreviewContainer}>
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.imagePreview}
-                  contentFit="cover"
-                  cachePolicy="none"
-                />
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  onPress={() => setPhotoPreviewUri(imageUri)}
+                  accessibilityLabel="사진 크�� 보기"
+                >
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={styles.imagePreview}
+                    contentFit="cover"
+                    cachePolicy="none"
+                  />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.removeImageBtn}
                   onPress={() => setImageUri(null)}
@@ -266,6 +279,19 @@ export default function CheckInScreen() {
                 </TouchableOpacity>
               </View>
             )}
+            <View style={[styles.field, styles.photoCaptionField]}>
+              <Text style={styles.photoCaptionLabel}>함께 남길 글 (선택)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, styles.photoCaptionInput]}
+                placeholder="사진과 함께 메모를 남길 수 있어요"
+                value={photoCaption}
+                onChangeText={setPhotoCaption}
+                multiline
+                maxLength={50}
+                editable={!submitting}
+              />
+              <Text style={styles.charCount}>{photoCaption.length}/50</Text>
+            </View>
           </View>
         )}
 
@@ -284,7 +310,13 @@ export default function CheckInScreen() {
         >
           <Text style={styles.cancelBtnText}>취소</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
+
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -358,6 +390,7 @@ const styles = StyleSheet.create({
   },
   textArea: {
     minHeight: 150,
+    maxHeight: 250,
     textAlignVertical: 'top',
   },
   charCount: {
@@ -367,7 +400,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   photoSection: {
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  photoCaptionField: {
+    marginTop: 16,
+    marginBottom: 0,
+  },
+  photoCaptionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  photoCaptionInput: {
+    minHeight: 100,
+    maxHeight: 180,
+    textAlignVertical: 'top',
   },
   photoButtons: {
     flexDirection: 'row',

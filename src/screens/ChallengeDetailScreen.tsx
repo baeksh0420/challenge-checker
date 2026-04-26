@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,23 +11,41 @@ import {
   Modal,
   FlatList,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppContext } from '../store/AppContext';
 import { CheckIn, RootStackParamList, User } from '../types';
 import CalendarView from '../components/CalendarView';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import ParticipantProgress from '../components/ParticipantProgress';
+import ProfileAvatarButton from '../components/ProfileAvatarButton';
 import { challengeHasParticipant, participantIds } from '../utils/challengeGuards';
-import { getParticipantAccent } from '../utils/participantColor';
-import { calculateFine, formatLocalDate } from '../utils/fineCalculator';
+import { getChallengeParticipantAccent } from '../utils/participantColor';
+import {
+  calculateFine,
+  formatLocalDate,
+  getWeeklyFineRule,
+} from '../utils/fineCalculator';
 import { isRecentEndedChallenge } from '../utils/challengeLifecycle';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'ChallengeDetail'>;
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 상세 표시: 제외 요일을 월→일 순으로 */
+const WEEKDAY_MON_FIRST_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function formatExcludedDaysMonFirst(excluded: number[] | undefined): string {
+  if (!excluded?.length) return '없음';
+  const set = new Set(excluded);
+  const ordered = WEEKDAY_MON_FIRST_ORDER.filter((d) => set.has(d));
+  return ordered.map((d) => DAY_LABELS[d]).join(', ');
+}
 
 /** 캘린더 탭: 참가자 전체 인증 일자 합산·날짜 탭 시 모달에서 모두 조회 */
 const CALENDAR_ALL_PARTICIPANTS = '__calendar_all__';
@@ -48,11 +66,43 @@ export default function ChallengeDetailScreen() {
 
   const [selectedUserId, setSelectedUserId] = useState(CALENDAR_ALL_PARTICIPANTS);
   const [detailDate, setDetailDate] = useState<string | null>(null);
+  const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
+  const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('#4F46E5');
+  const { width: windowWidth } = useWindowDimensions();
+
+  const isParticipant = challenge
+    ? challengeHasParticipant(challenge, state.currentUser?.id)
+    : false;
+  const pushMuted = challenge
+    ? (state.currentUser?.pushMutedChallengeIds ?? []).includes(challenge.id)
+    : false;
+  const isCreator = challenge
+    ? state.currentUser?.id === challenge.creatorId
+    : false;
+
+  const titleNameTextMaxW = useMemo(() => {
+    if (!challenge) return 0;
+    // content paddingHorizontal: 20×2, titleRow: nameRow | 8pt gap | key
+    const hPad = 40;
+    const keySlot = isParticipant ? 8 + 28 + 8 + 28 : 0;
+    const nameRowW = windowWidth - hPad - keySlot;
+      const pencilSlot = isCreator ? 4 + 24 : 0;
+    return Math.max(0, nameRowW - pencilSlot);
+  }, [windowWidth, challenge, isParticipant, isCreator]);
+
+  const COLOR_PALETTE = [
+    '#EF4444', '#F59E0B', '#10B981', '#3B82F6',
+    '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16',
+    '#F97316', '#14B8A6', '#6366F1', '#A855F7',
+  ];
 
   useEffect(() => {
     if (!challenge) return;
-    setSelectedUserId(CALENDAR_ALL_PARTICIPANTS);
-  }, [challenge?.id]);
+    const uid = state.currentUser?.id;
+    const isP = uid ? challenge.participants.includes(uid) : false;
+    setSelectedUserId(isP && uid ? uid : CALENDAR_ALL_PARTICIPANTS);
+  }, [challenge?.id, state.currentUser?.id]);
 
   const checkedDates = useMemo(() => {
     if (!challenge) return new Set<string>();
@@ -69,6 +119,22 @@ export default function ChallengeDetailScreen() {
         .map((ci) => ci.date)
     );
   }, [challenge, state.checkIns, selectedUserId]);
+
+  /** 전체 캘린더: 날짜마다 그날 인증한(서로 다른) 참가자 수 */
+  const dateParticipantCounts = useMemo(() => {
+    if (!challenge) return undefined;
+    const byDate: Record<string, Set<string>> = {};
+    for (const ci of state.checkIns) {
+      if (ci.challengeId !== challenge.id) continue;
+      if (!byDate[ci.date]) byDate[ci.date] = new Set();
+      byDate[ci.date]!.add(ci.userId);
+    }
+    const out: Record<string, number> = {};
+    for (const d of Object.keys(byDate)) {
+      out[d] = byDate[d]!.size;
+    }
+    return out;
+  }, [challenge, state.checkIns]);
 
   const dayDetailCheckIns = useMemo(() => {
     if (!challenge || !detailDate) return [];
@@ -100,12 +166,32 @@ export default function ChallengeDetailScreen() {
         const detail =
           f.fineMode === 'daily'
             ? `미인증 ${f.missedDays}일 · 일당 ${challenge.finePerMiss.toLocaleString()}원`
-            : `미달 ${f.missedWeeks}주 · 주당 ${challenge.finePerMiss.toLocaleString()}원`;
+            : getWeeklyFineRule(challenge) === 'perShortfall'
+              ? `누적 ${f.weeklyShortfallTotal}회 미달 · ${challenge.finePerMiss.toLocaleString()}원/회`
+              : `미달 ${f.missedWeeks}주 · 주당 ${challenge.finePerMiss.toLocaleString()}원`;
         fined.push({ user: u, amount: f.totalFine, detail });
       }
     }
     return { perfect, fined };
   }, [showEndedResultBlock, challenge, state.checkIns, state.users]);
+
+  const totalFineSum = useMemo(() => {
+    if (!challenge) return 0;
+    return participantIds(challenge).reduce((sum, uid) => {
+      const f = calculateFine(challenge, uid, state.checkIns);
+      return sum + f.totalFine;
+    }, 0);
+  }, [challenge, state.checkIns]);
+
+  const handleCheckInReaction = useCallback(
+    (ci: CheckIn, type: 'thumbsUp' | 'sad') => {
+      const uid = state.currentUser?.id;
+      if (!uid) return;
+      const list = ci.reactions?.[type] ?? [];
+      void actions.toggleCheckInReaction(ci.id, type, list.includes(uid));
+    },
+    [state.currentUser?.id, actions],
+  );
 
   if (!challenge) {
     return (
@@ -116,10 +202,7 @@ export default function ChallengeDetailScreen() {
   }
 
   const participants = participantIds(challenge);
-  const isParticipant = challengeHasParticipant(challenge, state.currentUser?.id);
-  const isActive = now >= new Date(challenge.startDate) && now <= new Date(challenge.endDate);
-
-  const isCreator = state.currentUser?.id === challenge.creatorId;
+  const isActive = todayStr >= challenge.startDate && todayStr <= challenge.endDate;
 
   const hasCheckedInToday = state.checkIns.some(
     (ci) =>
@@ -153,11 +236,27 @@ export default function ChallengeDetailScreen() {
     );
   };
 
+  const openCreatorMenu = () => {
+    Alert.alert(`${challenge.title} 편집`, undefined, [
+      {
+        text: '수정',
+        onPress: () =>
+          navigation.navigate('CreateChallenge', { editChallengeId: challenge.id }),
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => handleDelete(),
+      },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
   const handleShareInviteCode = async () => {
     const code = challenge.inviteCode ?? '';
     try {
       await Share.share({
-        message: `챌린지 "${challenge.title}"에 참여하세요!\n초대 코드: ${code}`,
+        message: `'${challenge.title}' 초대코드 공유 : ${code}`,
       });
     } catch {
       Alert.alert('초대 코드', `코드: ${code}\n이 코드를 참여자에게 공유하세요.`);
@@ -169,7 +268,7 @@ export default function ChallengeDetailScreen() {
   const accent =
     selectedUserId === CALENDAR_ALL_PARTICIPANTS
       ? CALENDAR_ALL_ACCENT
-      : getParticipantAccent(state.users, selectedUserId);
+      : getChallengeParticipantAccent(challenge, state.users, selectedUserId);
 
   const isSelfCalendar =
     !!state.currentUser?.id &&
@@ -218,36 +317,135 @@ export default function ChallengeDetailScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.title}>{challenge.title}</Text>
-        {challenge.description ? <Text style={styles.description}>{challenge.description}</Text> : null}
-
-        <View style={styles.infoBox}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>기간</Text>
-            <Text style={styles.infoValue}>
-              {challenge.startDate} ~ {challenge.endDate}
+        <View style={styles.titleRow}>
+          <View style={styles.titleNameRow}>
+            <Text
+              style={[styles.title, { maxWidth: titleNameTextMaxW }]}
+            >
+              {challenge.title}
             </Text>
+            {isCreator ? (
+              <TouchableOpacity
+                onPress={openCreatorMenu}
+                hitSlop={{ top: 14, bottom: 14, left: 8, right: 8 }}
+              >
+                <Ionicons name="pencil" size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            ) : null}
           </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>주당 필수</Text>
-            <Text style={styles.infoValue}>{challenge.requiredDaysPerWeek}회</Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>벌금</Text>
-            <Text style={styles.infoValue}>
-              {challenge.finePerMiss.toLocaleString()}원/
-              {(challenge.fineMode ?? 'weekly') === 'daily' ? '일' : '주'}
-            </Text>
-          </View>
-          {challenge.fineMode === 'daily' && challenge.excludedDays?.length > 0 ? (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>제외 요일</Text>
-              <Text style={styles.infoValue}>
-                {challenge.excludedDays.map((d: number) => DAY_LABELS[d]).join(', ')}
-              </Text>
+          {isParticipant ? (
+            <View style={styles.titleActions}>
+              <TouchableOpacity
+                style={styles.titleHeaderIconHit}
+                onPress={handleShareInviteCode}
+                hitSlop={{ top: 14, bottom: 14, left: 10, right: 6 }}
+              >
+                <Ionicons name="key-outline" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.titleHeaderIconHit}
+                onPress={() => {
+                  void actions.setChallengePushMuted(challenge.id, !pushMuted);
+                }}
+                hitSlop={{ top: 14, bottom: 14, left: 6, right: 10 }}
+                accessibilityLabel={
+                  pushMuted ? '이 챌린지 인증 알림 켜기' : '이 챌린지 인증 알림 끄기'
+                }
+              >
+                <Ionicons
+                  name={pushMuted ? 'notifications-off-outline' : 'notifications-outline'}
+                  size={20}
+                  color="#9CA3AF"
+                />
+              </TouchableOpacity>
             </View>
           ) : null}
         </View>
+        {challenge.description ? (
+          <Text style={styles.description} selectable>
+            {challenge.description}
+          </Text>
+        ) : null}
+
+        <View style={styles.infoBoxRow}>
+          <View style={styles.infoCard}>
+            <View style={styles.infoTitleSlot}>
+              <Text style={styles.infoCardLabel}>기간</Text>
+            </View>
+            <View style={styles.infoValueSlot}>
+              <View style={styles.infoCardPeriod}>
+                <Text
+                  style={styles.infoCardValue}
+                  selectable
+                >
+                  {challenge.startDate.slice(5)}
+                </Text>
+                <View style={styles.infoCardTildeRow}>
+                  <Text style={styles.infoCardTilde} selectable>
+                    -
+                  </Text>
+                </View>
+                <Text
+                  style={styles.infoCardValue}
+                  selectable
+                >
+                  {challenge.endDate.slice(5)}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoTitleSlot}>
+              <Text style={styles.infoCardLabel}>누적 벌금</Text>
+            </View>
+            <View style={styles.infoValueSlot}>
+              <Text style={styles.infoCardValueFine}>
+                {totalFineSum.toLocaleString()}원
+              </Text>
+            </View>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoTitleSlot}>
+              <Text style={styles.infoCardLabel}>
+                {challenge.fineMode === 'daily' ? '제외 요일' : '주당 필수'}
+              </Text>
+            </View>
+            <View style={styles.infoValueSlot}>
+              {challenge.fineMode === 'daily' ? (
+                <Text style={styles.infoCardValue}>
+                  {formatExcludedDaysMonFirst(challenge.excludedDays)}
+                </Text>
+              ) : (
+                <Text style={styles.infoCardValue}>
+                  {challenge.requiredDaysPerWeek}회
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {isParticipant && isActive ? (
+          <TouchableOpacity
+            style={[
+              styles.checkInBtn,
+              hasCheckedInToday && styles.checkInBtnMuted,
+            ]}
+            onPress={() =>
+              navigation.navigate('CheckIn', {
+                challengeId: challenge.id,
+              })
+            }
+          >
+            <Text
+              style={[
+                styles.checkInBtnText,
+                hasCheckedInToday && styles.checkInBtnTextMuted,
+              ]}
+            >
+              {hasCheckedInToday ? '인증 수정하기' : '오늘 인증하기'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         <ParticipantProgress challenge={challenge} />
 
@@ -255,6 +453,27 @@ export default function ChallengeDetailScreen() {
 
         <Text style={styles.sectionTitle}>캘린더</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow}>
+          {/* 내 캘린더 먼저 */}
+          {isParticipant && state.currentUser?.id ? (() => {
+            const myUid = state.currentUser.id;
+            const isSelected = selectedUserId === myUid;
+            const tabAccent = getChallengeParticipantAccent(challenge, state.users, myUid);
+            return (
+              <TouchableOpacity
+                key="mine"
+                style={[styles.userTab, styles.myTab, isSelected && { backgroundColor: tabAccent }]}
+                onPress={() => setSelectedUserId(myUid)}
+              >
+                <Text
+                  style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}
+                  numberOfLines={1}
+                >
+                  {state.currentUser?.name?.trim() || '내 캘린더'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })() : null}
+          {/* 전체 */}
           <TouchableOpacity
             style={[
               styles.userTab,
@@ -273,27 +492,28 @@ export default function ChallengeDetailScreen() {
               전체
             </Text>
           </TouchableOpacity>
-          {participants.map((uid) => {
-            const user = getUser(uid);
-            const isSelected = uid === selectedUserId;
-            const tabAccent = getParticipantAccent(state.users, uid);
-            return (
-              <TouchableOpacity
-                key={uid}
-                style={[
-                  styles.userTab,
-                  isSelected && {
-                    backgroundColor: tabAccent,
-                  },
-                ]}
-                onPress={() => setSelectedUserId(uid)}
-              >
-                <Text style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}>
-                  {user?.name ?? '???'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {/* 기타 참여자 */}
+          {participants
+            .filter((uid) => uid !== state.currentUser?.id)
+            .map((uid) => {
+              const user = getUser(uid);
+              const isSelected = uid === selectedUserId;
+              const tabAccent = getChallengeParticipantAccent(challenge, state.users, uid);
+              return (
+                <TouchableOpacity
+                  key={uid}
+                  style={[
+                    styles.userTab,
+                    isSelected && { backgroundColor: tabAccent },
+                  ]}
+                  onPress={() => setSelectedUserId(uid)}
+                >
+                  <Text style={[styles.userTabText, isSelected && { color: '#FFFFFF' }]}>
+                    {user?.name ?? '???'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
         </ScrollView>
 
         <CalendarView
@@ -301,6 +521,11 @@ export default function ChallengeDetailScreen() {
           challengeStart={challenge.startDate}
           challengeEnd={challenge.endDate}
           accentColor={accent}
+          dateParticipantCounts={
+            selectedUserId === CALENDAR_ALL_PARTICIPANTS
+              ? dateParticipantCounts
+              : undefined
+          }
           onPressCheckedDate={(dateStr) => setDetailDate(dateStr)}
           onPressUncheckedInRangeDate={
             selectedUserId === CALENDAR_ALL_PARTICIPANTS
@@ -324,53 +549,44 @@ export default function ChallengeDetailScreen() {
         />
 
         <View style={styles.actionRow}>
-          {isParticipant ? (
-            <TouchableOpacity style={styles.inviteBtn} onPress={handleShareInviteCode}>
-              <Text style={styles.inviteBtnText}>
-                📨 초대 코드 공유: {challenge.inviteCode ?? ''}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          {isParticipant && isActive ? (
+          {isParticipant && state.currentUser?.id ? (
             <TouchableOpacity
-              style={[
-                styles.checkInBtn,
-                hasCheckedInToday && styles.checkInBtnMuted,
-              ]}
-              onPress={() =>
-                navigation.navigate('CheckIn', {
-                  challengeId: challenge.id,
-                })
-              }
+              style={styles.colorBtn}
+              onPress={() => {
+                const cur = getChallengeParticipantAccent(
+                  challenge,
+                  state.users,
+                  state.currentUser!.id
+                );
+                setSelectedColor(cur);
+                setColorPickerVisible(true);
+              }}
+              activeOpacity={0.8}
             >
-              <Text
+              <View
                 style={[
-                  styles.checkInBtnText,
-                  hasCheckedInToday && styles.checkInBtnTextMuted,
+                  styles.colorBtnDot,
+                  {
+                    backgroundColor: getChallengeParticipantAccent(
+                      challenge,
+                      state.users,
+                      state.currentUser.id
+                    ),
+                  },
                 ]}
-              >
-                {hasCheckedInToday ? '인증 수정하기' : '오늘 인증하기'}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          {isCreator ? (
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() =>
-                navigation.navigate('CreateChallenge', {
-                  editChallengeId: challenge.id,
-                })
-              }
-            >
-              <Text style={styles.editBtnText}>챌린지 수정</Text>
-            </TouchableOpacity>
-          ) : null}
-          {isCreator ? (
-            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-              <Text style={styles.deleteBtnText}>챌린지 삭제</Text>
+              />
+              <Text style={styles.colorBtnText}>내 컬러 변경</Text>
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {challenge.fineMode !== 'daily' ? (
+          <Text style={styles.weeklyFineHint}>
+            {getWeeklyFineRule(challenge) === 'perShortfall'
+              ? `주간 벌금: 매주 월~일 기준, 부족한 횟수 × ${challenge.finePerMiss.toLocaleString()}원이 누적됩니다.`
+              : `주간 벌금: 매주 월~일 기준, 목표 미달 시 주당 ${challenge.finePerMiss.toLocaleString()}원이 부과됩니다.`}
+          </Text>
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -397,14 +613,41 @@ export default function ChallengeDetailScreen() {
                 renderItem={({ item: ci }) => {
                   const author = getUser(ci.userId);
                   const isMine = ci.userId === state.currentUser?.id;
+                  const uid = state.currentUser?.id;
+                  const thumbs = ci.reactions?.thumbsUp ?? [];
+                  const rainy = ci.reactions?.sad ?? [];
+                  const myThumbs = uid ? thumbs.includes(uid) : false;
+                  const myRainy = uid ? rainy.includes(uid) : false;
                   return (
                     <View style={styles.feedItem}>
                       <View style={styles.feedItemHeader}>
+                        <ProfileAvatarButton
+                          user={author}
+                          userId={ci.userId}
+                          size={36}
+                          initialBackgroundColor={getChallengeParticipantAccent(
+                            challenge,
+                            state.users,
+                            ci.userId
+                          )}
+                          style={{ marginRight: 8, marginTop: 0 }}
+                          beforeNavigate={() => setDetailDate(null)}
+                        />
                         <View style={styles.feedItemHeaderText}>
-                          <Text style={styles.feedAuthor}>
+                          <Text
+                            style={[
+                              styles.feedAuthor,
+                              author
+                                ? { color: getChallengeParticipantAccent(challenge, state.users, ci.userId) }
+                                : null,
+                            ]}
+                            selectable
+                          >
                             {author?.name ?? '알 수 없음'}
                           </Text>
-                          <Text style={styles.feedMeta}>{ci.date}</Text>
+                          <Text style={styles.feedMeta} selectable>
+                            {ci.date}
+                          </Text>
                         </View>
                         {isMine ? (
                           <View style={styles.feedItemActions}>
@@ -439,22 +682,147 @@ export default function ChallengeDetailScreen() {
                         ) : null}
                       </View>
                       {ci.type === 'text' ? (
-                        <Text style={styles.feedText}>{String(ci.content ?? '')}</Text>
+                        <Text style={styles.feedText} selectable>
+                          {String(ci.content ?? '')}
+                        </Text>
                       ) : (
-                        <Image
-                          source={{ uri: ci.content }}
-                          style={styles.feedImage}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                          recyclingKey={ci.id}
-                          transition={150}
-                        />
+                        <>
+                          <TouchableOpacity
+                            activeOpacity={0.92}
+                            onPress={() => setPhotoPreviewUri(ci.content)}
+                            accessibilityLabel="사진 크게 보기"
+                          >
+                            <Image
+                              source={{ uri: ci.content }}
+                              style={styles.feedImage}
+                              contentFit="contain"
+                              cachePolicy="memory-disk"
+                              recyclingKey={ci.id}
+                              transition={150}
+                            />
+                          </TouchableOpacity>
+                          {ci.textNote ? (
+                            <Text style={styles.feedPhotoNote} selectable>
+                              {ci.textNote}
+                            </Text>
+                          ) : null}
+                        </>
                       )}
+                      {uid ? (
+                        <View style={styles.feedReactionRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.feedReactionBtn,
+                              myThumbs && styles.feedReactionBtnActive,
+                            ]}
+                            onPress={() => handleCheckInReaction(ci, 'thumbsUp')}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons
+                              name={myThumbs ? 'thumbs-up' : 'thumbs-up-outline'}
+                              size={18}
+                              color={myThumbs ? '#4F46E5' : '#9CA3AF'}
+                            />
+                            {thumbs.length > 0 ? (
+                              <Text
+                                style={[
+                                  styles.feedReactionCount,
+                                  myThumbs && styles.feedReactionCountActive,
+                                ]}
+                              >
+                                {thumbs.length}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.feedReactionBtn,
+                              myRainy && styles.feedReactionBtnActive,
+                            ]}
+                            onPress={() => handleCheckInReaction(ci, 'sad')}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons
+                              name={myRainy ? 'rainy' : 'rainy-outline'}
+                              size={18}
+                              color={myRainy ? '#4F46E5' : '#9CA3AF'}
+                            />
+                            {rainy.length > 0 ? (
+                              <Text
+                                style={[
+                                  styles.feedReactionCount,
+                                  myRainy && styles.feedReactionCountActive,
+                                ]}
+                              >
+                                {rainy.length}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
                     </View>
                   );
                 }}
               />
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <ImagePreviewModal
+        visible={!!photoPreviewUri}
+        imageUri={photoPreviewUri}
+        onClose={() => setPhotoPreviewUri(null)}
+      />
+
+      <Modal
+        visible={colorPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setColorPickerVisible(false)}
+      >
+        <Pressable style={styles.colorBackdrop} onPress={() => setColorPickerVisible(false)}>
+          <Pressable style={styles.colorCard} onPress={() => {}}>
+            <Text style={styles.colorTitle}>내 캘린더 컬러 변경</Text>
+            <View style={styles.colorPalette}>
+              {COLOR_PALETTE.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorDot,
+                    { backgroundColor: color },
+                    selectedColor === color && styles.colorDotSelected,
+                  ]}
+                  onPress={() => setSelectedColor(color)}
+                  activeOpacity={0.8}
+                />
+              ))}
+            </View>
+            <View style={styles.colorPreviewRow}>
+              <View style={[styles.colorPreviewDot, { backgroundColor: selectedColor }]} />
+              <Text style={styles.colorPreviewText}>선택된 컬러</Text>
+            </View>
+            <View style={styles.colorActions}>
+              <TouchableOpacity
+                style={styles.colorCancelBtn}
+                onPress={() => setColorPickerVisible(false)}
+              >
+                <Text style={styles.colorCancelBtnText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.colorConfirmBtn}
+                onPress={() => {
+                  void (async () => {
+                    if (state.currentUser?.id) {
+                      await actions.updateParticipantColor(challenge.id, selectedColor);
+                    }
+                    setColorPickerVisible(false);
+                  })();
+                }}
+              >
+                <Text style={styles.colorConfirmBtnText}>저장</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -543,11 +911,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 8,
+  },
+  titleNameRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
   title: {
     fontSize: 24,
     fontWeight: '800',
     color: '#1F2937',
-    marginBottom: 8,
+  },
+  titleActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 4,
+    flexShrink: 0,
+  },
+  /** 열쇠·알림 아이콘 동일 박스에 중앙 정렬해 한 줄로 맞춤 */
+  titleHeaderIconHit: {
+    flexShrink: 0,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   description: {
     fontSize: 15,
@@ -555,25 +951,74 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 22,
   },
-  infoBox: {
+  infoBoxRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    marginBottom: 20,
+  },
+  infoCard: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    flexDirection: 'column',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    gap: 10,
+    padding: 12,
   },
-  infoItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  infoTitleSlot: {
+    width: '100%',
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0,
   },
-  infoLabel: {
+  infoValueSlot: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 64,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoCardValue: {
     fontSize: 14,
-    color: '#6B7280',
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1F2937',
+    textAlign: 'center',
+  },
+  infoCardValueFine: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#DC2626',
+    textAlign: 'center',
+  },
+  infoCardLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  infoCardPeriod: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 2,
+  },
+  infoCardTildeRow: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  infoCardTilde: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+  weeklyFineHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
   },
   sectionTitle: {
     fontSize: 16,
@@ -606,6 +1051,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
+    marginBottom: 20,
   },
   checkInBtnMuted: {
     backgroundColor: '#E5E7EB',
@@ -620,32 +1066,6 @@ const styles = StyleSheet.create({
   checkInBtnTextMuted: {
     color: '#6B7280',
   },
-  editBtn: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  editBtnText: {
-    color: '#4F46E5',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  deleteBtn: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  deleteBtnText: {
-    color: '#EF4444',
-    fontSize: 16,
-    fontWeight: '700',
-  },
   inviteBtn: {
     backgroundColor: '#EEF2FF',
     borderRadius: 14,
@@ -658,6 +1078,113 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontSize: 15,
     fontWeight: '700',
+  },
+  colorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  colorBtnDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  colorBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  myTab: {
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+  },
+  colorBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  colorCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 360,
+    padding: 24,
+  },
+  colorTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  colorPalette: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  colorDot: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  colorDotSelected: {
+    borderWidth: 3,
+    borderColor: '#1F2937',
+    transform: [{ scale: 1.15 }],
+  },
+  colorPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  colorPreviewDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  colorPreviewText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  colorActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  colorCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  colorCancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  colorConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+    alignItems: 'center',
+  },
+  colorConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   modalBackdrop: {
     flex: 1,
@@ -707,7 +1234,7 @@ const styles = StyleSheet.create({
   },
   feedItemHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
@@ -746,11 +1273,47 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
+  feedPhotoNote: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginTop: 8,
+    marginBottom: 8,
+  },
   feedImage: {
     width: '100%',
-    height: 180,
+    aspectRatio: 1,
     borderRadius: 12,
     marginTop: 8,
     backgroundColor: '#F3F4F6',
+  },
+  feedReactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+    gap: 8,
+  },
+  feedReactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    gap: 4,
+  },
+  feedReactionBtnActive: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  feedReactionCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  feedReactionCountActive: {
+    color: '#4F46E5',
   },
 });

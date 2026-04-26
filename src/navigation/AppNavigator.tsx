@@ -1,4 +1,6 @@
 import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -8,7 +10,6 @@ import { useAppContext } from '../store/AppContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
-import MyChallengesScreen from '../screens/MyChallengesScreen';
 import BoardListScreen from '../screens/BoardListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateChallengeScreen from '../screens/CreateChallengeScreen';
@@ -16,13 +17,18 @@ import ChallengeDetailScreen from '../screens/ChallengeDetailScreen';
 import ChallengeBoardScreen from '../screens/ChallengeBoardScreen';
 import CheckInScreen from '../screens/CheckInScreen';
 import JoinByCodeScreen from '../screens/JoinByCodeScreen';
-import AllMyChallengesScreen from '../screens/AllMyChallengesScreen';
-import MyCheckInHistoryScreen from '../screens/MyCheckInHistoryScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+  const barPadTop = 6;
+  const barPadBottom = 2 + insets.bottom;
+  // 탭 아이콘+라벨 + 위·아래 + iPhone 홈 인디케이터(safe area)
+  const tabBarHeight = 44 + barPadTop + barPadBottom;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -32,16 +38,14 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#F3F4F6',
-          paddingBottom: 12,
-          paddingTop: 10,
-          height: 68,
+          paddingTop: barPadTop,
+          paddingBottom: barPadBottom,
+          height: tabBarHeight,
         },
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'MyChallenges') {
-            iconName = focused ? 'today' : 'today-outline';
           } else if (route.name === 'Board') {
             iconName = focused ? 'newspaper' : 'newspaper-outline';
           } else if (route.name === 'Profile') {
@@ -55,11 +59,6 @@ function MainTabs() {
         name="Home"
         component={HomeScreen}
         options={{ tabBarLabel: '홈' }}
-      />
-      <Tab.Screen
-        name="MyChallenges"
-        component={MyChallengesScreen}
-        options={{ tabBarLabel: '오늘인증' }}
       />
       <Tab.Screen
         name="Board"
@@ -78,6 +77,14 @@ function MainTabs() {
 export default function AppNavigator() {
   const { state } = useAppContext();
   const isLoggedIn = !!state.currentUser;
+
+  if (state.authLoading) {
+    return (
+      <View style={loadingStyles.container}>
+        <ActivityIndicator size="large" color="#4F46E5" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
@@ -105,7 +112,7 @@ export default function AppNavigator() {
           <Stack.Screen
             name="ChallengeDetail"
             component={ChallengeDetailScreen}
-            options={{ title: '챌린지 상세' }}
+            options={{ headerTitle: '' }}
           />
           <Stack.Screen
             name="ChallengeBoard"
@@ -123,14 +130,9 @@ export default function AppNavigator() {
             options={{ title: '초대 코드 입력' }}
           />
           <Stack.Screen
-            name="AllMyChallenges"
-            component={AllMyChallengesScreen}
-            options={{ title: '내 챌린지 전체' }}
-          />
-          <Stack.Screen
-            name="MyCheckInHistory"
-            component={MyCheckInHistoryScreen}
-            options={{ title: '내 인증내역' }}
+            name="UserProfile"
+            component={UserProfileScreen}
+            options={{ title: '프로필' }}
           />
         </Stack.Navigator>
       ) : (
@@ -139,3 +141,12 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const loadingStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+});

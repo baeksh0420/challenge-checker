@@ -12,6 +12,11 @@ interface CalendarViewProps {
   challengeStart: string;
   challengeEnd: string;
   accentColor?: string;
+  /**
+   * 전체 캘린더(모든 참가자)용: 날짜 → 그날 인증한 서로 다른 사람 수.
+   * 있으면 체크 대신 이 숫자를 셀에 표시한다.
+   */
+  dateParticipantCounts?: Record<string, number>;
   /** 인증 완료된 날짜 탭 시 (전체 인증 내역 모달 등) */
   onPressCheckedDate?: (dateStr: string) => void;
   /** 기간 내·아직 인증 없는 날 탭 시 (과거/오늘 보충 인증 등) */
@@ -26,6 +31,7 @@ export default function CalendarView({
   challengeStart,
   challengeEnd,
   accentColor = '#4F46E5',
+  dateParticipantCounts,
   onPressCheckedDate,
   onPressUncheckedInRangeDate,
 }: CalendarViewProps) {
@@ -65,6 +71,8 @@ export default function CalendarView({
       const isChecked = checkedDates.has(dateStr);
       const isToday = dateStr === todayStr;
       const isInRange = dateStr >= challengeStart && dateStr <= challengeEnd;
+      const partCount = dateParticipantCounts?.[dateStr] ?? 0;
+      const showAllCount = !!dateParticipantCounts && isChecked;
 
       const circle = (
         <View
@@ -77,9 +85,34 @@ export default function CalendarView({
             },
             isToday && !isChecked && isInRange && styles.todayCircle,
             !isInRange && styles.outOfRange,
+            showAllCount && styles.dayCircleTall,
           ]}
         >
-          {isChecked ? (
+          {isChecked && showAllCount && partCount > 0 ? (
+            <>
+              <Text
+                style={[
+                  styles.allCalDay,
+                  { color: accentColor },
+                  !isInRange && styles.outOfRangeText,
+                ]}
+              >
+                {day}
+              </Text>
+              <Text
+                style={[
+                  styles.allCalCount,
+                  { color: accentColor },
+                  !isInRange && styles.outOfRangeText,
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
+              >
+                {partCount}
+              </Text>
+            </>
+          ) : isChecked ? (
             <>
               <Text
                 style={[
@@ -218,6 +251,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 2,
+  },
+  dayCircleTall: {
+    minHeight: 40,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  allCalDay: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '600',
+  },
+  allCalCount: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 16,
   },
   dayText: {
     fontSize: 14,

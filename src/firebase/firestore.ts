@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  addDoc,
   updateDoc,
   getDocs,
   getDoc,
@@ -9,10 +8,12 @@ import {
   where,
   onSnapshot,
   arrayUnion,
+  arrayRemove,
   serverTimestamp,
   Unsubscribe,
   setDoc,
   deleteDoc,
+  deleteField,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './config';
@@ -29,12 +30,16 @@ function normalizeUserDoc(data: Record<string, unknown>, id: string): User {
     typeof data.photoURL === 'string' && data.photoURL.length > 0
       ? data.photoURL
       : undefined;
+  const pushMutedChallengeIds = Array.isArray(data.pushMutedChallengeIds)
+    ? (data.pushMutedChallengeIds as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
   return {
     id,
     email: typeof data.email === 'string' ? data.email : '',
     name: typeof data.name === 'string' ? data.name : '사용자',
     avatarColor: typeof data.avatarColor === 'string' ? data.avatarColor : '#6B7280',
     ...(photoURL ? { photoURL } : {}),
+    pushMutedChallengeIds,
   };
 }
 
@@ -59,9 +64,38 @@ export async function updateUserProfile(
   await updateDoc(doc(db, USERS, userId), fields);
 }
 
+/** Expo 푸시 토큰·타임존(조용한 시간·요약용) */
+export async function updateUserPushProvisioning(
+  userId: string,
+  fields: { expoPushToken?: string | null; pushTimeZone?: string }
+): Promise<void> {
+  await updateDoc(doc(db, USERS, userId), fields);
+}
+
+/** 챌린지별 인증 푸시 끄기/켜기 */
+export async function setUserChallengePushMuted(
+  userId: string,
+  challengeId: string,
+  muted: boolean
+): Promise<void> {
+  await updateDoc(doc(db, USERS, userId), {
+    pushMutedChallengeIds: muted ? arrayUnion(challengeId) : arrayRemove(challengeId),
+  });
+}
+
+function uriToBlob(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => resolve(xhr.response as Blob);
+    xhr.onerror = () => reject(new Error('Failed to read local file'));
+    xhr.responseType = 'blob';
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+}
+
 export async function uploadUserAvatar(userId: string, uri: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const blob = await uriToBlob(uri);
   const imageRef = ref(storage, `avatars/${userId}.jpg`);
   await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(imageRef);
@@ -107,6 +141,10 @@ export async function updateChallenge(challenge: Challenge): Promise<void> {
     fineMode: challenge.fineMode,
     excludedDays: challenge.excludedDays,
     finePerMiss: challenge.finePerMiss,
+    weeklyFineRule:
+      challenge.fineMode === 'weekly'
+        ? (challenge.weeklyFineRule ?? 'flat')
+        : deleteField(),
   });
 }
 
@@ -220,6 +258,29 @@ export function subscribeCheckInsByChallenge(
   });
 }
 
+export async function toggleCheckInReaction(
+  checkInId: string,
+  reactionType: 'thumbsUp' | 'sad',
+  userId: string,
+  hasReacted: boolean
+): Promise<void> {
+  const checkInRef = doc(db, CHECKINS, checkInId);
+  await updateDoc(checkInRef, {
+    [`reactions.${reactionType}`]: hasReacted ? arrayRemove(userId) : arrayUnion(userId),
+  });
+}
+
+export async function updateParticipantColor(
+  challengeId: string,
+  userId: string,
+  color: string
+): Promise<void> {
+  const challengeRef = doc(db, CHALLENGES, challengeId);
+  await updateDoc(challengeRef, {
+    [`participantColors.${userId}`]: color,
+  });
+}
+
 // ─── Storage (사진 업로드) ───
 export async function deleteChallenge(challengeId: string): Promise<void> {
   // 챌린지 문서 삭제
@@ -238,8 +299,7 @@ export async function uploadCheckInImage(
   date: string,
   uri: string
 ): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const blob = await uriToBlob(uri);
   const imageRef = ref(storage, `checkIns/${challengeId}/${userId}/${date}.jpg`);
   await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(imageRef);

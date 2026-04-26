@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Challenge } from '../types';
-import { useAppContext } from '../store/AppContext';
-import { challengeHasParticipant, participantIds } from '../utils/challengeGuards';
+import { Ionicons } from '@expo/vector-icons';
+import { Challenge, CheckIn } from '../types';
+import { participantIds } from '../utils/challengeGuards';
+import { formatLocalDate, getWeeklyProgressThisMondayWeek } from '../utils/fineCalculator';
 
 interface ChallengeCardProps {
   challenge: Challenge;
@@ -17,6 +18,10 @@ interface ChallengeCardProps {
   hideDescription?: boolean;
   /** 오늘인증 탭: 진행중/예정/종료 뱃지 숨김 */
   hideStatusBadge?: boolean;
+  /** 현재 사용자 ID (불꽃 표시용) */
+  currentUserId?: string;
+  /** 전체 체크인 목록 (불꽃 표시용) */
+  checkIns?: CheckIn[];
 }
 
 export default function ChallengeCard({
@@ -27,22 +32,43 @@ export default function ChallengeCard({
   hideFooter = false,
   hideDescription = false,
   hideStatusBadge = false,
+  currentUserId,
+  checkIns = [],
 }: ChallengeCardProps) {
-  const { state } = useAppContext();
   const participants = participantIds(challenge);
   const participantCount = participants.length;
-  const isJoined = challengeHasParticipant(challenge, state.currentUser?.id);
 
-  const startDate = new Date(challenge.startDate);
-  const endDate = new Date(challenge.endDate);
   const now = new Date();
-  const isActive = now >= startDate && now <= endDate;
-  const isUpcoming = now < startDate;
+  const todayStr = formatLocalDate(now);
+  const isActive = todayStr >= challenge.startDate && todayStr <= challenge.endDate;
+  const isUpcoming = todayStr < challenge.startDate;
 
   const statusText = isActive ? '진행 중' : isUpcoming ? '예정' : '종료';
   const statusColor = isActive ? '#10B981' : isUpcoming ? '#F59E0B' : '#6B7280';
 
+  const endDate = new Date(challenge.endDate + 'T00:00:00');
+  const diffMs = endDate.getTime() - new Date(todayStr + 'T00:00:00').getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const dDayText = diffDays > 0 ? `D-${diffDays}` : diffDays === 0 ? 'D-Day' : `D+${Math.abs(diffDays)}`;
+
   const done = verificationComplete;
+
+  const isDaily = challenge.fineMode === 'daily';
+  let flameActive = false;
+  let weeklyLabel: string | null = null;
+  const todayExcluded = isDaily && (challenge.excludedDays ?? []).includes(now.getDay());
+
+  if (isActive && currentUserId) {
+    if (isDaily) {
+      flameActive = checkIns.some(
+        (ci) => ci.challengeId === challenge.id && ci.userId === currentUserId && ci.date === todayStr
+      );
+    } else {
+      const { current, required } = getWeeklyProgressThisMondayWeek(challenge, currentUserId, checkIns, now);
+      flameActive = current >= required;
+      weeklyLabel = `${current}/${required}`;
+    }
+  }
 
   return (
     <TouchableOpacity
@@ -51,10 +77,36 @@ export default function ChallengeCard({
       activeOpacity={0.7}
     >
       <View style={[styles.header, hideStatusBadge && styles.headerTitleOnly]}>
-        <Text style={[styles.title, done && styles.titleDone]} numberOfLines={hideStatusBadge ? 2 : 1}>
+        <View style={[styles.modeBadge, { backgroundColor: isDaily ? '#10B98120' : '#3B82F620' }]}>
+          <Text style={[styles.modeBadgeText, { color: isDaily ? '#10B981' : '#3B82F6' }]}>
+            {isDaily ? '매일' : `주${challenge.requiredDaysPerWeek}회`}
+          </Text>
+        </View>
+        <Text
+          style={[styles.title, done && styles.titleDone]}
+          numberOfLines={hideStatusBadge ? 2 : 1}
+          selectable
+        >
           {challenge.title}
         </Text>
-        {!hideStatusBadge ? (
+        {!hideStatusBadge && isActive ? (
+          <View style={styles.flameWrap}>
+            {todayExcluded ? (
+              <Ionicons name="leaf" size={20} color="#10B981" />
+            ) : (
+              <Ionicons
+                name={flameActive ? 'flame' : 'flame-outline'}
+                size={20}
+                color={flameActive ? '#F97316' : '#D1D5DB'}
+              />
+            )}
+            {weeklyLabel ? (
+              <Text style={[styles.weeklyLabel, flameActive && styles.weeklyLabelActive]}>
+                {weeklyLabel}
+              </Text>
+            ) : null}
+          </View>
+        ) : !hideStatusBadge && !isActive ? (
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }, done && styles.statusBadgeDone]}>
             <Text style={[styles.statusText, { color: statusColor }, done && styles.statusTextDone]}>
               {statusText}
@@ -64,7 +116,11 @@ export default function ChallengeCard({
       </View>
 
       {!hideDescription && challenge.description ? (
-        <Text style={[styles.description, done && styles.descriptionDone]} numberOfLines={2}>
+        <Text
+          style={[styles.description, done && styles.descriptionDone]}
+          numberOfLines={2}
+          selectable
+        >
           {challenge.description}
         </Text>
       ) : null}
@@ -79,20 +135,17 @@ export default function ChallengeCard({
         <>
           <View style={styles.footer}>
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, done && styles.mutedLabel]}>참여자</Text>
+              <Ionicons name="person-outline" size={13} color="#9CA3AF" style={{ marginRight: 3 }} />
               <Text style={[styles.infoValue, done && styles.mutedValue]}>{participantCount}명</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, done && styles.mutedLabel]}>주 {challenge.requiredDaysPerWeek}회</Text>
-              <Text style={[styles.infoValue, done && styles.mutedValue]}>
-                벌금 {challenge.finePerMiss.toLocaleString()}원
-              </Text>
+              <Ionicons name="cash-outline" size={13} color="#9CA3AF" style={{ marginRight: 3 }} />
+              <Text style={[styles.infoValue, done && styles.mutedValue]}>{challenge.finePerMiss.toLocaleString()}원</Text>
             </View>
-            {isJoined && (
-              <View style={[styles.joinedBadge, done && styles.joinedBadgeDone]}>
-                <Text style={[styles.joinedText, done && styles.joinedTextDone]}>참여 중</Text>
-              </View>
-            )}
+            <View style={styles.infoRow}>
+              <Ionicons name="calendar-outline" size={13} color="#9CA3AF" style={{ marginRight: 3 }} />
+              <Text style={[styles.infoValue, done && styles.mutedValue]}>{dDayText}</Text>
+            </View>
           </View>
 
           <Text style={[styles.dateRange, done && styles.dateRangeDone]}>
@@ -148,6 +201,29 @@ const styles = StyleSheet.create({
   },
   statusTextDone: {
     opacity: 0.9,
+  },
+  modeBadge: {
+    width: 44,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  modeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  flameWrap: {
+    alignItems: 'center',
+  },
+  weeklyLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#D1D5DB',
+    marginTop: 1,
+  },
+  weeklyLabelActive: {
+    color: '#F97316',
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -210,23 +286,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#4B5563',
-  },
-  joinedBadge: {
-    backgroundColor: '#4F46E520',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  joinedText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4F46E5',
-  },
-  joinedBadgeDone: {
-    backgroundColor: '#9CA3AF40',
-  },
-  joinedTextDone: {
-    color: '#6B7280',
   },
   dateRange: {
     fontSize: 12,
