@@ -47,11 +47,6 @@ function formatExcludedDaysMonFirst(excluded: number[] | undefined): string {
   return ordered.map((d) => DAY_LABELS[d]).join(', ');
 }
 
-/** 캘린더 탭: 참가자 전체 인증 일자 합산·날짜 탭 시 모달에서 모두 조회 */
-const CALENDAR_ALL_PARTICIPANTS = '__calendar_all__';
-
-const CALENDAR_ALL_ACCENT = '#000000';
-
 function parseCreatedAt(ci: CheckIn): number {
   const t = Date.parse(ci.createdAt);
   return Number.isFinite(t) ? t : 0;
@@ -64,7 +59,7 @@ export default function ChallengeDetailScreen() {
   const challengeId = route.params.challengeId;
   const challenge = state.challenges.find((c) => c.id === challengeId);
 
-  const [selectedUserId, setSelectedUserId] = useState(CALENDAR_ALL_PARTICIPANTS);
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [detailDate, setDetailDate] = useState<string | null>(null);
   const [photoPreviewUri, setPhotoPreviewUri] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
@@ -101,18 +96,16 @@ export default function ChallengeDetailScreen() {
     if (!challenge) return;
     const uid = state.currentUser?.id;
     const isP = uid ? challenge.participants.includes(uid) : false;
-    setSelectedUserId(isP && uid ? uid : CALENDAR_ALL_PARTICIPANTS);
+    if (isP && uid) {
+      setSelectedUserId(uid);
+      return;
+    }
+    const first = challenge.participants[0];
+    if (first) setSelectedUserId(first);
   }, [challenge?.id, state.currentUser?.id]);
 
   const checkedDates = useMemo(() => {
-    if (!challenge) return new Set<string>();
-    if (selectedUserId === CALENDAR_ALL_PARTICIPANTS) {
-      const dates = new Set<string>();
-      for (const ci of state.checkIns) {
-        if (ci.challengeId === challenge.id) dates.add(ci.date);
-      }
-      return dates;
-    }
+    if (!challenge || !selectedUserId) return new Set<string>();
     return new Set(
       state.checkIns
         .filter((ci) => ci.challengeId === challenge.id && ci.userId === selectedUserId)
@@ -120,31 +113,16 @@ export default function ChallengeDetailScreen() {
     );
   }, [challenge, state.checkIns, selectedUserId]);
 
-  /** 전체 캘린더: 날짜마다 그날 인증한(서로 다른) 참가자 수 */
-  const dateParticipantCounts = useMemo(() => {
-    if (!challenge) return undefined;
-    const byDate: Record<string, Set<string>> = {};
-    for (const ci of state.checkIns) {
-      if (ci.challengeId !== challenge.id) continue;
-      if (!byDate[ci.date]) byDate[ci.date] = new Set();
-      byDate[ci.date]!.add(ci.userId);
-    }
-    const out: Record<string, number> = {};
-    for (const d of Object.keys(byDate)) {
-      out[d] = byDate[d]!.size;
-    }
-    return out;
-  }, [challenge, state.checkIns]);
-
   const dayDetailCheckIns = useMemo(() => {
-    if (!challenge || !detailDate) return [];
-    let list = state.checkIns.filter(
-      (ci) => ci.challengeId === challenge.id && ci.date === detailDate
-    );
-    if (selectedUserId !== CALENDAR_ALL_PARTICIPANTS) {
-      list = list.filter((ci) => ci.userId === selectedUserId);
-    }
-    return list.sort((a, b) => parseCreatedAt(b) - parseCreatedAt(a));
+    if (!challenge || !detailDate || !selectedUserId) return [];
+    return state.checkIns
+      .filter(
+        (ci) =>
+          ci.challengeId === challenge.id &&
+          ci.date === detailDate &&
+          ci.userId === selectedUserId
+      )
+      .sort((a, b) => parseCreatedAt(b) - parseCreatedAt(a));
   }, [detailDate, state.checkIns, challenge, selectedUserId]);
 
   const now = new Date();
@@ -265,15 +243,12 @@ export default function ChallengeDetailScreen() {
 
   const getUser = (userId: string) => state.users.find((u) => u.id === userId);
 
-  const accent =
-    selectedUserId === CALENDAR_ALL_PARTICIPANTS
-      ? CALENDAR_ALL_ACCENT
-      : getChallengeParticipantAccent(challenge, state.users, selectedUserId);
+  const accent = selectedUserId
+    ? getChallengeParticipantAccent(challenge, state.users, selectedUserId)
+    : '#4F46E5';
 
   const isSelfCalendar =
-    !!state.currentUser?.id &&
-    selectedUserId === state.currentUser.id &&
-    selectedUserId !== CALENDAR_ALL_PARTICIPANTS;
+    !!state.currentUser?.id && selectedUserId === state.currentUser.id;
   /** 내 캘린더에서 기간 내 지난 날·오늘 보충 인증 (종료된 챌린지 포함) */
   const canSupplementCheckIn = isParticipant && isSelfCalendar;
 
@@ -473,25 +448,6 @@ export default function ChallengeDetailScreen() {
               </TouchableOpacity>
             );
           })() : null}
-          {/* 전체 */}
-          <TouchableOpacity
-            style={[
-              styles.userTab,
-              selectedUserId === CALENDAR_ALL_PARTICIPANTS && {
-                backgroundColor: CALENDAR_ALL_ACCENT,
-              },
-            ]}
-            onPress={() => setSelectedUserId(CALENDAR_ALL_PARTICIPANTS)}
-          >
-            <Text
-              style={[
-                styles.userTabText,
-                selectedUserId === CALENDAR_ALL_PARTICIPANTS && { color: '#FFFFFF' },
-              ]}
-            >
-              전체
-            </Text>
-          </TouchableOpacity>
           {/* 기타 참여자 */}
           {participants
             .filter((uid) => uid !== state.currentUser?.id)
@@ -521,30 +477,23 @@ export default function ChallengeDetailScreen() {
           challengeStart={challenge.startDate}
           challengeEnd={challenge.endDate}
           accentColor={accent}
-          dateParticipantCounts={
-            selectedUserId === CALENDAR_ALL_PARTICIPANTS
-              ? dateParticipantCounts
-              : undefined
-          }
           onPressCheckedDate={(dateStr) => setDetailDate(dateStr)}
           onPressUncheckedInRangeDate={
-            selectedUserId === CALENDAR_ALL_PARTICIPANTS
-              ? (dateStr) => setDetailDate(dateStr)
-              : canSupplementCheckIn
-                ? (dateStr) => {
-                    if (dateStr > todayStr) {
-                      Alert.alert('알림', '오늘 이후 날짜에는 인증할 수 없습니다.');
-                      return;
-                    }
-                    if (dateStr < challenge.startDate || dateStr > challenge.endDate) {
-                      return;
-                    }
-                    navigation.navigate('CheckIn', {
-                      challengeId: challenge.id,
-                      date: dateStr,
-                    });
+            canSupplementCheckIn
+              ? (dateStr) => {
+                  if (dateStr > todayStr) {
+                    Alert.alert('알림', '오늘 이후 날짜에는 인증할 수 없습니다.');
+                    return;
                   }
-                : (dateStr) => setDetailDate(dateStr)
+                  if (dateStr < challenge.startDate || dateStr > challenge.endDate) {
+                    return;
+                  }
+                  navigation.navigate('CheckIn', {
+                    challengeId: challenge.id,
+                    date: dateStr,
+                  });
+                }
+              : (dateStr) => setDetailDate(dateStr)
           }
         />
 
