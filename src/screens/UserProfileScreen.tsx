@@ -10,7 +10,6 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useAppContext } from '../store/AppContext';
 import { RootStackParamList } from '../types';
-import { androidTopInsetStyle } from '../utils/androidTopInset';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import ProfileMyChallengesTab from './profile/ProfileMyChallengesTab';
@@ -50,7 +49,7 @@ export default function UserProfileScreen() {
 
   if (!user) {
     return (
-      <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.missingCard}>
           <Text style={styles.missingText}>이 사용자를 찾을 수 없습니다.</Text>
         </View>
@@ -61,7 +60,7 @@ export default function UserProfileScreen() {
   const gridTitle = `${user.name}님의 인증`;
 
   return (
-    <SafeAreaView style={[styles.container, androidTopInsetStyle()]}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.flex}>
         <View style={styles.profileCard}>
           <View style={styles.profileRow}>

@@ -3,7 +3,7 @@
     "name": "챌린지체커",
     "slug": "challenge-checker",
     "scheme": "challengechecker",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.soh.challengechecker",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": ["remote-notification"]
@@ -28,14 +28,14 @@
         "backgroundColor": "#4F46E5"
       },
       "package": "com.soh.challengechecker",
-      "versionCode": 2,
+      "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
       ]
     },
-    "runtimeVersion": "1.2.0",
+    "runtimeVersion": "1.2.1",
     "updates": {
       "url": "https://u.expo.dev/8acecbba-814d-4747-92c0-f4fc385a1e5e",
       "checkAutomatically": "NEVER",
