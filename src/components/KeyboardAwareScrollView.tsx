@@ -10,6 +10,27 @@ import {
 
 const DEFAULT_EXTRA_HEIGHT = 80;
 
+type Measurable = {
+  measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void;
+};
+
+function resolveMeasurableHost(focused: unknown): Measurable | null {
+  if (focused == null) return null;
+  const candidates: unknown[] = [];
+  if (typeof focused === 'object' && focused !== null && 'current' in focused) {
+    const cur = (focused as { current: unknown }).current;
+    if (cur != null) candidates.push(cur);
+  }
+  candidates.push(focused);
+  for (const c of candidates) {
+    const m = c as { measureInWindow?: unknown };
+    if (typeof m.measureInWindow === 'function') {
+      return m as Measurable;
+    }
+  }
+  return null;
+}
+
 export default function KeyboardAwareScrollView({
   children,
   extraScrollHeight = DEFAULT_EXTRA_HEIGHT,
@@ -36,22 +57,24 @@ export default function KeyboardAwareScrollView({
         const focused = TextInput.State.currentlyFocusedInput();
         if (!focused || !scrollRef.current) return;
 
-        const measure = (
-          focused as unknown as {
-            measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void;
-          }
-        ).measureInWindow;
-        measure((_x, y, _w, h) => {
-          const inputBottom = y + h;
-          const gap = 24;
-          if (inputBottom + gap > kbScreenY) {
-            const delta = inputBottom + gap - kbScreenY;
-            scrollRef.current?.scrollTo({
-              y: scrollY.current + delta,
-              animated: true,
-            });
-          }
-        });
+        const host = resolveMeasurableHost(focused);
+        if (!host) return;
+
+        try {
+          host.measureInWindow((_x, y, _w, h) => {
+            const inputBottom = y + h;
+            const gap = 24;
+            if (inputBottom + gap > kbScreenY) {
+              const delta = inputBottom + gap - kbScreenY;
+              scrollRef.current?.scrollTo({
+                y: scrollY.current + delta,
+                animated: true,
+              });
+            }
+          });
+        } catch {
+          /* Fabric·레이아웃 타이밍 등으로 measure 실패 시 스크롤 보정 생략 */
+        }
       });
     };
 
